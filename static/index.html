@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GURPS-Sheet-Manager</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/tabs/characters.css">
+    <link rel="stylesheet" href="/static/css/tabs/catalog.css">
+    <link rel="stylesheet" href="/static/css/tabs/traits.css">
+    <link rel="stylesheet" href="/static/css/tabs/database.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="brand">
+                    <span class="brand-full">GURPS-Sheet-Manager</span>
+                    <span class="brand-short">GSM</span>
+                </span>
+                <button type="button" class="sidebar-toggle" id="sidebar-toggle" title="Recolher ou expandir a coluna lateral">&lt;&lt;</button>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebar-nav">
+                <button type="button" class="nav-item" data-tab="characters" title="Personagens">
+                    <span class="nav-code">PE</span>
+                    <span class="nav-label">Personagens</span>
+                </button>
+                <button type="button" class="nav-item" data-tab="catalog" title="Equipamentos">
+                    <span class="nav-code">EQ</span>
+                    <span class="nav-label">Equipamentos</span>
+                </button>
+                <button type="button" class="nav-item" data-tab="traits" title="Magias e Traços">
+                    <span class="nav-code">TR</span>
+                    <span class="nav-label">Magias e Traços</span>
+                </button>
+                <button type="button" class="nav-item" data-tab="database" title="Banco de Dados">
+                    <span class="nav-code">BD</span>
+                    <span class="nav-label">Banco de Dados</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <span class="status-dot" id="db-status"></span>
+                <span class="nav-label" id="db-status-label">Verificando...</span>
+            </div>
+        </aside>
+
+        <main class="content">
+            <section class="tab-panel" id="tab-characters" data-tab-panel="characters"></section>
+            <section class="tab-panel" id="tab-catalog" data-tab-panel="catalog"></section>
+            <section class="tab-panel" id="tab-traits" data-tab-panel="traits"></section>
+            <section class="tab-panel" id="tab-database" data-tab-panel="database"></section>
+        </main>
+    </div>
+
+    <div id="modal-root"></div>
+    <div id="toast-root"></div>
+
+    <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

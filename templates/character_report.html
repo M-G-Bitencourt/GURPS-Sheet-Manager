@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Ficha de {{ character.name }}</title>
+    <link rel="stylesheet" href="css/pdf_report.css">
+</head>
+<body>
+    <header class="report-header">
+        <div class="report-header__identity">
+            <span class="eyebrow">Ficha de Personagem</span>
+            <h1>{{ character.name }}</h1>
+            <div class="meta">
+                <span class="meta__item">ID {{ character.character_id }}</span>
+                {% if character.owner_id %}
+                <span class="meta__item">Dono {{ character.owner_id }}</span>
+                {% endif %}
+                <span class="meta__item">{{ 'PdM (NPC)' if character.is_npc else 'Personagem de Jogador' }}</span>
+            </div>
+        </div>
+        <div class="report-header__summary">
+            <div class="summary-block">
+                <span class="summary-block__label">Pontos Totais</span>
+                <span class="summary-block__value">{{ points.total }}</span>
+            </div>
+            <div class="summary-block">
+                <span class="summary-block__label">Dinheiro</span>
+                <span class="summary-block__value">$ {{ character.money or 0 }}</span>
+            </div>
+        </div>
+    </header>
+
+    <section class="section">
+        <h2 class="section__title">Atributos e Recursos</h2>
+        <div class="chip-grid">
+            {% for label, value in [
+                ('ST', character.st), ('DX', character.dx), ('IQ', character.iq), ('HT', character.ht),
+                ('PV', (character.current_pv or 0) ~ ' / ' ~ derived.pv_max),
+                ('PF', (character.current_pf or 0) ~ ' / ' ~ derived.pf_max),
+                ('RE', (character.current_er or 0) ~ ' / ' ~ derived.er),
+                ('Vel. Básica', derived.basic_speed),
+                ('Deslocamento', derived.basic_move),
+                ('Percepção', derived.per),
+                ('Vontade', derived.vont),
+                ('Pontos Atuais', character.current_points or 0)
+            ] %}
+            <div class="chip">
+                <span class="chip__label">{{ label }}</span>
+                <span class="chip__value">{{ value }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Balanço de Pontos</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Grupo</th>
+                    <th class="text-right">Pontos</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Atributos Base</td>
+                    <td class="text-right">{{ points.base_attributes.total }}</td>
+                </tr>
+                <tr>
+                    <td>Características Secundárias</td>
+                    <td class="text-right">{{ points.secondary.total }}</td>
+                </tr>
+                <tr>
+                    <td>Vantagens</td>
+                    <td class="text-right">{{ points.advantages }}</td>
+                </tr>
+                <tr>
+                    <td>Desvantagens</td>
+                    <td class="text-right">{{ points.disadvantages }}</td>
+                </tr>
+                <tr>
+                    <td>Perícias</td>
+                    <td class="text-right">{{ points.skills }}</td>
+                </tr>
+                <tr>
+                    <td>Magias</td>
+                    <td class="text-right">{{ points.spells }}</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td>Total Geral</td>
+                    <td class="text-right">{{ points.total }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Vantagens</h2>
+        {% if advantages %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Vantagem</th>
+                    <th>Notas</th>
+                    <th class="text-right">Custo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for advantage in advantages %}
+                <tr>
+                    <td>{{ advantage.item_label }}</td>
+                    <td>{{ advantage.notes or '-' }}</td>
+                    <td class="text-right">{{ advantage.points }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma vantagem registrada.</p>
+        {% endif %}
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Desvantagens</h2>
+        {% if disadvantages %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Desvantagem</th>
+                    <th>Notas</th>
+                    <th class="text-right">Custo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for disadvantage in disadvantages %}
+                <tr>
+                    <td>{{ disadvantage.item_label }}</td>
+                    <td>{{ disadvantage.notes or '-' }}</td>
+                    <td class="text-right">{{ disadvantage.points }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma desvantagem registrada.</p>
+        {% endif %}
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Perícias</h2>
+        {% if skills %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Perícia</th>
+                    <th>Atributo</th>
+                    <th>Dificuldade</th>
+                    <th>Nível</th>
+                    <th class="text-right">NH</th>
+                    <th class="text-right">Custo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for skill in skills %}
+                <tr>
+                    <td>{{ skill.name }}</td>
+                    <td>{{ skill.attribute }}</td>
+                    <td>{{ skill.difficulty or '-' }}</td>
+                    <td>{{ skill.relative_display }}</td>
+                    <td class="text-right">{{ skill.nh }}</td>
+                    <td class="text-right">{{ skill.point_cost }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma perícia registrada.</p>
+        {% endif %}
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Magias</h2>
+        {% if spells %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Magia</th>
+                    <th>Escola</th>
+                    <th>Dificuldade</th>
+                    <th>Nível</th>
+                    <th class="text-right">NH</th>
+                    <th class="text-right">Custo</th>
+                    <th>Recurso</th>
+                    <th class="text-right">Pontos</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for spell in spells %}
+                <tr>
+                    <td>{{ spell.name }}</td>
+                    <td>{{ spell.school }}</td>
+                    <td>{{ spell.difficulty or '-' }}</td>
+                    <td>{{ spell.relative_display }}</td>
+                    <td class="text-right">{{ spell.nh }}</td>
+                    <td class="text-right">{{ spell.cost }}</td>
+                    <td>{{ spell.resource }}</td>
+                    <td class="text-right">{{ spell.point_cost }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma magia registrada.</p>
+        {% endif %}
+    </section>
+
+    {% if additional_stats %}
+    <section class="section">
+        <h2 class="section__title">Stats Adicionais</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Stat</th>
+                    <th class="text-right">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in additional_stats %}
+                <tr>
+                    <td>{{ stat.item_label }}</td>
+                    <td class="text-right">{{ stat.value }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    <section class="section">
+        <h2 class="section__title">Inventário</h2>
+
+        <h3 class="subsection__title">Itens</h3>
+        {% if inventory['items'] %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th class="text-right">Qtd</th>
+                    <th class="text-right">Peso (kg)</th>
+                    <th class="text-right">Custo ($)</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in inventory['items'] %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td class="text-right">{{ item.quantity }}</td>
+                    <td class="text-right">{{ '%.2f'|format(item.weight) }}</td>
+                    <td class="text-right">{{ '%.2f'|format(item.cost * item.quantity) }}</td>
+                    <td>{{ '[EQUIPADO]' if item.is_equipped else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhum item registrado.</p>
+        {% endif %}
+
+        <h3 class="subsection__title">Armas Corpo a Corpo</h3>
+        {% if inventory.melee_weapons %}
+            {% for weapon in inventory.melee_weapons %}
+            <div class="weapon-block">
+                <div class="weapon-block__header">
+                    <span class="weapon-block__name">{{ weapon.custom_name or weapon.name }}</span>
+                    {% if weapon.custom_name %}
+                    <span class="weapon-block__base">{{ weapon.name }}</span>
+                    {% endif %}
+                    <span class="badge">Qtd {{ weapon.quantity }}</span>
+                    {% if weapon.is_equipped %}
+                    <span class="badge badge--equipped">[EQUIPADO]</span>
+                    {% endif %}
+                </div>
+                <div class="weapon-block__stats">
+                    NT {{ weapon.tl }} &middot; ST {{ weapon.min_st }}{% if weapon.is_two_handed %} &middot; Duas Mãos{% endif %} &middot; Peso {{ '%.2f'|format(weapon.weight) }} kg &middot; $ {{ '%.2f'|format(weapon.cost) }}
+                </div>
+                {% if weapon.modes %}
+                <table class="data-table data-table--compact">
+                    <thead>
+                        <tr>
+                            <th>Modo</th>
+                            <th>Perícia</th>
+                            <th>Dano</th>
+                            <th>Alcance</th>
+                            <th>Aparar</th>
+                            <th>Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mode in weapon.modes %}
+                        <tr>
+                            <td>{{ mode.mode_name }}</td>
+                            <td>{{ mode.skill_name }}</td>
+                            <td>{{ mode.damage_base }}{{ '+' if mode.damage_modifier >= 0 else '' }}{{ mode.damage_modifier }} {{ mode.damage_type }}</td>
+                            <td>{{ mode.reach }}</td>
+                            <td>{{ mode.parry }}</td>
+                            <td>{{ mode.notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty">Nenhum modo de ataque cadastrado.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+        <p class="empty">Nenhuma arma corpo a corpo registrada.</p>
+        {% endif %}
+
+        <h3 class="subsection__title">Armas à Distância</h3>
+        {% if inventory.ranged_weapons %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Arma</th>
+                    <th>Dano</th>
+                    <th>Acc</th>
+                    <th>1/2D</th>
+                    <th>Máx</th>
+                    <th>RoF</th>
+                    <th>Tiros</th>
+                    <th>ST</th>
+                    <th>Rcl</th>
+                    <th class="text-right">Peso</th>
+                    <th class="text-right">Custo</th>
+                    <th class="text-right">Qtd</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for weapon in inventory.ranged_weapons %}
+                <tr>
+                    <td>{{ weapon.name }}</td>
+                    <td>{{ weapon.damage or '-' }}</td>
+                    <td>{{ weapon.acc }}</td>
+                    <td>{{ weapon.range_half or '-' }}</td>
+                    <td>{{ weapon.range_max or '-' }}</td>
+                    <td>{{ weapon.rof }}</td>
+                    <td>{{ weapon.shots or '-' }}</td>
+                    <td>{{ weapon.min_st }}</td>
+                    <td>{{ weapon.recoil }}</td>
+                    <td class="text-right">{{ '%.2f'|format(weapon.weight) }}</td>
+                    <td class="text-right">{{ '%.2f'|format(weapon.cost * weapon.quantity) }}</td>
+                    <td class="text-right">{{ weapon.quantity }}</td>
+                    <td>{{ '[EQUIPADO]' if weapon.is_equipped else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma arma à distância registrada.</p>
+        {% endif %}
+
+        <h3 class="subsection__title">Armaduras</h3>
+        {% if inventory.armors %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Peça</th>
+                    <th class="text-right">RD</th>
+                    <th>Parte</th>
+                    <th class="text-right">Peso</th>
+                    <th class="text-right">Custo</th>
+                    <th class="text-right">Qtd</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for armor in inventory.armors %}
+                <tr>
+                    <td>{{ armor.custom_name or armor.material_name }}</td>
+                    <td class="text-right">{{ armor.dr }}</td>
+                    <td>{{ armor.body_part_name }}</td>
+                    <td class="text-right">{{ '%.2f'|format(armor.weight) }}</td>
+                    <td class="text-right">{{ '%.2f'|format(armor.cost) }}</td>
+                    <td class="text-right">{{ armor.quantity }}</td>
+                    <td>{{ '[EQUIPADO]' if armor.is_equipped else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nenhuma armadura registrada.</p>
+        {% endif %}
+    </section>
+
+    <section class="section">
+        <h2 class="section__title">Carga</h2>
+        <div class="totals-grid">
+            <div class="total-card">
+                <span class="total-card__label">Peso Total</span>
+                <span class="total-card__value">{{ '%.2f'|format(inventory.total_weight) }} kg</span>
+            </div>
+            <div class="total-card">
+                <span class="total-card__label">Custo Total</span>
+                <span class="total-card__value">$ {{ '%.2f'|format(inventory.total_cost) }}</span>
+            </div>
+        </div>
+    </section>
+
+    <footer class="report-footer">
+        Gerado em {{ generated_at }} pelo GURPS-Sheet-Manager.
+    </footer>
+</body>
+</html>

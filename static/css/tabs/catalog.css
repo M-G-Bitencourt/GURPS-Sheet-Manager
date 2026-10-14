@@ -1,0 +1,13 @@
+.catalog-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+.modes-modal .panel-title h3 {
+    color: var(--accent);
+}
+
+.modes-modal .table-wrapper {
+    margin-bottom: 14px;
+}

@@ -1,0 +1,14 @@
+.traits-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+.trait-points-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 12px;
+}

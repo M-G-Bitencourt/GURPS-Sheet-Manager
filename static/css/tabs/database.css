@@ -1,0 +1,81 @@
+.database-active {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.database-active-info {
+    min-width: 0;
+}
+
+.database-active .spacer {
+    flex: 1;
+}
+
+.database-path {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.database-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.badge-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.database-form {
+    margin-bottom: 8px;
+}
+
+.database-path-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.database-path-row input {
+    flex: 1;
+    min-width: 260px;
+    font-family: var(--font-mono);
+}
+
+.database-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0;
+}
+
+.database-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.database-recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--panel-alt);
+}
+
+.database-recent-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.database-recent-actions {
+    display: flex;
+    gap: 6px;
+}
