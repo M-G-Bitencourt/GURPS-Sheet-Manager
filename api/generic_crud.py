@@ -57,6 +57,41 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return {key: row[key] for key in row.keys()}
 
 
+def _casefold(value: Any) -> str:
+    """Normalizes a value for case-insensitive duplicate comparison."""
+    return str(value).strip().casefold()
+
+
+def ensure_unique_columns(
+    connection: sqlite3.Connection,
+    resource: Resource,
+    values: Dict[str, Any],
+    exclude_pk: Any = None,
+) -> None:
+    """Rejects values that would duplicate a declared unique column of the resource."""
+    columns = [
+        name for name in resource.unique_columns if values.get(name) not in (None, "")
+    ]
+    if not columns:
+        return
+
+    selected = ", ".join(f'"{name}"' for name in columns)
+    query = f'SELECT {selected} FROM "{resource.table}"'
+    parameters: List[Any] = []
+    if exclude_pk is not None:
+        query += f' WHERE "{resource.pk}" <> ?'
+        parameters.append(exclude_pk)
+
+    wanted = {name: _casefold(values[name]) for name in columns}
+    for row in connection.execute(query, parameters):
+        if all(_casefold(row[name]) == wanted[name] for name in columns):
+            column = find_column(resource, columns[0])
+            label = column.label if column else columns[0]
+            raise ConflictError(
+                f"Já existe um registro com o mesmo valor no campo '{label}'."
+            )
+
+
 def translate_integrity_error(resource: Resource, error: sqlite3.IntegrityError) -> ApiError:
     message = str(error)
 
@@ -134,6 +169,8 @@ def create_row(resource_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
     connection = get_connection()
     try:
+        ensure_unique_columns(connection, resource, values)
+
         if resource.pk_generation == "max_plus_one":
             next_pk = connection.execute(
                 f'SELECT COALESCE(MAX("{resource.pk}"), 0) + 1 FROM "{resource.table}"'
@@ -186,6 +223,8 @@ def update_row(
 
     connection = get_connection()
     try:
+        ensure_unique_columns(connection, resource, updates, exclude_pk=primary_key)
+
         cursor = connection.execute(query, parameters)
         connection.commit()
         if cursor.rowcount == 0:

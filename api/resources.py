@@ -35,6 +35,7 @@ class Resource:
     search_columns: Tuple[str, ...] = ()
     order_by: Optional[str] = None
     delete_blocked_hint: Optional[str] = None
+    unique_columns: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "melee-weapons": Resource(
         key="melee-weapons",
@@ -133,6 +135,7 @@ RESOURCES = {
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
         delete_blocked_hint="Existem personagens vinculados a esta arma.",
+        unique_columns=("name",),
     ),
     "melee-weapon-modes": Resource(
         key="melee-weapon-modes",
@@ -192,6 +195,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "armor-materials": Resource(
         key="armor-materials",
@@ -211,6 +215,7 @@ RESOURCES = {
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
         delete_blocked_hint="Existem personagens usando este material de armadura.",
+        unique_columns=("name",),
     ),
     "body-parts": Resource(
         key="body-parts",
@@ -246,6 +251,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "spells": Resource(
         key="spells",
@@ -275,6 +281,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "difficulties": Resource(
         key="difficulties",
@@ -308,6 +315,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "disadvantages": Resource(
         key="disadvantages",
@@ -321,6 +329,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        unique_columns=("name",),
     ),
     "additional-stats": Resource(
         key="additional-stats",
