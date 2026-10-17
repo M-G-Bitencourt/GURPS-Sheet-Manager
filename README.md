@@ -2,12 +2,13 @@
 
 # GURPS-Sheet-Manager
 
-**Gestão completa de fichas de personagem de GURPS — local, organizada e pronta para exportar.**
+**Gestão completa de fichas de GURPS — e a principal ferramenta para editar o banco de dados do [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master).**
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1%2B-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![WeasyPrint](https://img.shields.io/badge/WeasyPrint-70%2B-FF5722)](https://weasyprint.org/)
+[![Dice-Master](https://img.shields.io/badge/Dice--Master-Discord%20Bot-5865F2?logo=discord&logoColor=white)](https://github.com/M-G-Bitencourt/Dice-Master)
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-AGPL--3.0-blue)](LICENSE)
 
 <img src="git-assets/characters.png" alt="Tela principal do GURPS-Sheet-Manager com a ficha de um personagem" width="100%">
@@ -19,6 +20,8 @@
 O **GURPS-Sheet-Manager** é uma aplicação web local para criar, consultar e gerenciar fichas de personagem de GURPS. Em uma única interface, você reúne atributos, recursos, perícias, magias, vantagens, desvantagens, equipamentos e inventário — com cálculos automáticos de pontos, carga e estatísticas derivadas.
 
 Os dados ficam em um banco **SQLite** que você pode escolher, criar ou trocar a qualquer momento. Sem conta, sem servidor externo: tudo roda na sua máquina e permanece sob seu controle.
+
+Além das fichas, o GURPS-Sheet-Manager é a **principal ferramenta para editar o banco de dados do [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master)**, o bot de Discord que automatiza rolagens, cálculos de dano e o acompanhamento de personagens durante as sessões de GURPS.
 
 ## Funcionalidades
 
@@ -33,6 +36,13 @@ Os dados ficam em um banco **SQLite** que você pode escolher, criar ou trocar a
 - **Exportação em PDF** — gere a ficha completa em PDF com um clique.
 - **Múltiplos bancos de dados** — abra, crie e alterne entre arquivos SQLite; o app valida o esquema e mantém a lista de recentes.
 - **Proteção contra duplicidade** — validação de registros repetidos nos catálogos.
+- **Integração com Dice-Master** — abre e edita o mesmo banco SQLite do bot de Discord [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master), sendo a principal ferramenta para gerenciar personagens, perícias, magias, equipamentos e inventário usados nas sessões.
+
+## Integração com Dice-Master
+
+O [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master) é um bot de Discord para GURPS que automatiza rolagens, cálculos de dano e o acompanhamento de fichas durante as sessões. O GURPS-Sheet-Manager é a **principal ferramenta para editar o banco de dados utilizado por ele**.
+
+Na aba **Banco de Dados**, selecione o arquivo SQLite do Dice-Master para gerenciar personagens, perícias, magias, vantagens, desvantagens, equipamentos e inventário com uma interface visual, sem precisar editar o banco manualmente. O esquema do arquivo é validado antes da abertura, evitando alterações em bancos incompatíveis.
 
 ## Telas
 
