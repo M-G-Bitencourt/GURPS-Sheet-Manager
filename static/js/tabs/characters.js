@@ -510,6 +510,13 @@ function renderDetail() {
         ]),
     ]);
 
+    const primary = statSection('Atributos Primários', [
+        ['ST', character.st],
+        ['DX', character.dx],
+        ['IQ', character.iq],
+        ['HT', character.ht],
+    ]);
+
     const resources = statSection('Recursos', [
         ['PV Máximos', derived.pv_max],
         ['PV Atuais', character.current_pv],
@@ -552,7 +559,7 @@ function renderDetail() {
     subnav.setActive(state.activeRelation);
     relationPanels[state.activeRelation].classList.add('active');
 
-    mount.append(header, resources, secondary, pointsSection(details.points), load, el('div', { class: 'panel' }, [
+    mount.append(header, primary, resources, secondary, pointsSection(details.points), load, el('div', { class: 'panel' }, [
         el('div', { class: 'panel-title' }, [
             el('h2', { text: 'Habilidades e Inventário' }),
         ]),
