@@ -140,6 +140,11 @@ def create_database_view():
 def reset_database_view():
     _require_local_request()
     initialize_database(DEFAULT_DATABASE_PATH)
+    problems = validate_database(DEFAULT_DATABASE_PATH)
+    if problems:
+        raise ApiError(
+            "O banco padrão é incompatível com o esquema atual: " + " ".join(problems)
+        )
     return jsonify(_activate(DEFAULT_DATABASE_PATH))
 
 

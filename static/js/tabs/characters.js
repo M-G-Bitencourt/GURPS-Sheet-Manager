@@ -15,6 +15,13 @@ import {
     showToast,
     truncatedText,
 } from '../components.js';
+import {
+    combatEffectTargetLabel,
+    combatEffectTargetOptions,
+    combatEffectTypeLabel,
+    formatCombatEffectUses,
+    formatCombatEffectValue,
+} from '../combatEffects.js';
 
 const RELATION_PANELS = [
     { key: 'skills', label: 'Perícias' },
@@ -22,6 +29,7 @@ const RELATION_PANELS = [
     { key: 'advantages', label: 'Vantagens' },
     { key: 'disadvantages', label: 'Desvantagens' },
     { key: 'additional-stats', label: 'Stats Adicionais' },
+    { key: 'combat-effects', label: 'Efeitos de Combate' },
     { key: 'items', label: 'Itens' },
     { key: 'melee-weapons', label: 'Armas Corpo a Corpo' },
     { key: 'ranged-weapons', label: 'Armas a Distância' },
@@ -54,6 +62,12 @@ function equippedBadge(row) {
     return row.is_equipped ? buildBadge('EQUIPADO', 'badge-equipped') : '-';
 }
 
+function effectTargetDisplay(appliesTo, target) {
+    return combatEffectTargetOptions(appliesTo).length === 1
+        ? '-'
+        : combatEffectTargetLabel(target);
+}
+
 function definitionList(entries) {
     const list = el('dl', { class: 'detail-list' });
     for (const [label, value] of entries) {
@@ -81,11 +95,12 @@ function modesBlock(modes) {
         buildTable({
             columns: [
                 { label: 'Modo', render: (mode) => mode.mode_name },
-                { label: 'Perícia', render: (mode) => mode.skill_name },
+                { label: 'Perícia', render: (mode) => mode.skill_name ?? '-' },
                 {
                     label: 'Dano',
                     render: (mode) => `${mode.damage_base}${mode.damage_modifier >= 0 ? '+' : ''}${mode.damage_modifier} ${mode.damage_type}`,
                 },
+                { label: 'Mod. Ataque', class: 'text-right', render: (mode) => mode.attack_modifier ?? 0 },
                 { label: 'Alcance', render: (mode) => mode.reach },
                 { label: 'Aparar', render: (mode) => mode.parry },
                 { label: 'Notas', render: (mode) => mode.notes ?? '-' },
@@ -203,6 +218,39 @@ const RELATION_CONFIG = {
             ]),
         ],
     },
+    'combat-effects': {
+        data: (details) => details.combat_effects,
+        columns: [
+            { label: 'Efeito', render: (row) => row.item_label },
+            { label: 'Tipo', render: (row) => combatEffectTypeLabel(row.item_applies_to) },
+            {
+                label: 'Alvo',
+                render: (row) => effectTargetDisplay(row.item_applies_to, row.item_target),
+            },
+            {
+                label: 'Valor',
+                class: 'text-right',
+                render: (row) => formatCombatEffectValue(row.item_value),
+            },
+            {
+                label: 'Usos/Turno',
+                class: 'text-right',
+                render: (row) => formatCombatEffectUses(row.item_applies_to, row.item_uses_per_turn),
+            },
+            { label: 'Notas', render: (row) => truncatedText(row.item_notes) },
+        ],
+        addLabel: 'Adicionar Efeito',
+        detail: (row) => [
+            definitionList([
+                ['Efeito', row.item_label],
+                ['Tipo', combatEffectTypeLabel(row.item_applies_to)],
+                ['Alvo', effectTargetDisplay(row.item_applies_to, row.item_target)],
+                ['Valor', formatCombatEffectValue(row.item_value)],
+                ['Usos por Turno', formatCombatEffectUses(row.item_applies_to, row.item_uses_per_turn)],
+                ['Notas', row.item_notes],
+            ]),
+        ],
+    },
     items: {
         data: (details) => details.inventory.items,
         columns: [
@@ -246,6 +294,8 @@ const RELATION_CONFIG = {
                 ['NT', row.tl],
                 ['ST Mínimo', row.min_st],
                 ['Empunhadura', row.is_two_handed ? 'Duas Mãos' : 'Uma Mão'],
+                ['Desarmado', row.is_unarmed ? 'Sim' : 'Não'],
+                ['Fallback', row.is_fallback ? 'Sim' : 'Não'],
                 ['Peso (kg)', formatNumber(row.weight, 3)],
                 ['Custo ($)', formatNumber(row.cost)],
                 ['Quantidade', row.quantity],
@@ -269,6 +319,7 @@ const RELATION_CONFIG = {
         detail: (row) => [
             definitionList([
                 ['Arma', row.name],
+                ['Perícia', row.skill_name || '-'],
                 ['Dano', row.damage],
                 ['Precisão (Acc)', row.acc],
                 ['Alcance 1/2D', row.range_half],
@@ -292,6 +343,7 @@ const RELATION_CONFIG = {
             { label: 'Peça', render: (row) => itemDisplayName(row) },
             { label: 'RD', class: 'text-right', render: (row) => row.dr },
             { label: 'Parte', render: (row) => row.body_part_name },
+            { label: 'Camada', class: 'text-right', render: (row) => row.layer_order ?? 0 },
             { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
             {
                 label: 'Custo ($)',
@@ -309,6 +361,7 @@ const RELATION_CONFIG = {
                 ['Parte do Corpo', row.body_part_name],
                 ['Resistência a Dano (RD)', row.dr],
                 ['Flexível', row.is_flexible ? 'Sim' : 'Não'],
+                ['Camada', row.layer_order ?? 0],
                 ['Tempo para Vestir (s)', row.don_time],
                 ['Peso (kg)', formatNumber(row.weight, 3)],
                 ['Custo ($)', formatNumber(row.cost)],
@@ -593,9 +646,10 @@ function renderRelationPanel(relationKey) {
         addButton,
     ]);
 
-    const actions = [
-        { label: 'Editar', onClick: (row) => openRelationForm(relationKey, row) },
-    ];
+    const actions = [];
+    if (relation.columns.length || relation.secondary_fk) {
+        actions.push({ label: 'Editar', onClick: (row) => openRelationForm(relationKey, row) });
+    }
 
     if (config.canToggleEquip) {
         actions.push({
@@ -665,7 +719,11 @@ async function openRelationForm(relationKey, row) {
     if (!row) {
         columns.push({
             name: relation.item_fk,
-            label: relationKey === 'armors' ? 'Material' : 'Registro',
+            label: relationKey === 'armors'
+                ? 'Material'
+                : relationKey === 'combat-effects'
+                    ? 'Efeito'
+                    : 'Registro',
             type: 'fk',
             required: true,
             fk_resource: relation.item_resource,

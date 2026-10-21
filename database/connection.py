@@ -2,8 +2,9 @@
 
 import sqlite3
 import threading
+from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "database.db"
@@ -51,6 +52,40 @@ def database_exists(path=None) -> bool:
     return _resolve_target(path).exists()
 
 
+@lru_cache(maxsize=1)
+def expected_schema() -> Tuple[int, Dict[str, Tuple[str, ...]]]:
+    """
+    Builds the canonical schema from init.sql in memory. Returns the expected
+    user_version and a mapping of table name to declared columns.
+    """
+    if not INIT_SQL_PATH.exists():
+        raise FileNotFoundError(
+            f"Initialization aborted: the required DDL script '{INIT_SQL_PATH}' "
+            "is missing from the filesystem."
+        )
+
+    schema_instructions = INIT_SQL_PATH.read_text(encoding="utf-8")
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.executescript(schema_instructions)
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        tables = {}
+        for (table,) in connection.execute(
+            """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        ):
+            tables[table] = tuple(
+                row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')
+            )
+    finally:
+        connection.close()
+
+    return version, tables
+
+
 def initialize_database(path=None) -> None:
     """
     Validates the existence of the SQLite binary file. If absent, it builds
@@ -62,36 +97,21 @@ def initialize_database(path=None) -> None:
     if target.exists():
         return
 
-    if not INIT_SQL_PATH.exists():
-        raise FileNotFoundError(
-            f"Initialization aborted: the required DDL script '{INIT_SQL_PATH}' "
-            "is missing from the filesystem."
-        )
-
     schema_instructions = INIT_SQL_PATH.read_text(encoding="utf-8")
 
-    with sqlite3.connect(target) as connection:
+    connection = sqlite3.connect(target)
+    try:
         connection.execute("PRAGMA foreign_keys = ON;")
         connection.executescript(schema_instructions)
         connection.commit()
+    finally:
+        connection.close()
 
-
-def _required_tables() -> dict:
-    """Maps every app-managed table to the columns the application expects."""
-    from api.resources import RELATIONS, RESOURCES
-
-    required = {}
-    for resource in RESOURCES.values():
-        columns = required.setdefault(resource.table, set())
-        columns.update(column.name for column in resource.columns)
-    for relation in RELATIONS.values():
-        columns = required.setdefault(relation.table, set())
-        columns.add("character_id")
-        columns.add(relation.item_fk)
-        columns.update(column.name for column in relation.columns)
-        if relation.secondary_fk:
-            columns.add(relation.secondary_fk)
-    return required
+    problems = validate_database(target)
+    if problems:
+        raise sqlite3.DatabaseError(
+            "O banco criado não corresponde ao esquema esperado: " + " ".join(problems)
+        )
 
 
 def validate_database(path=None) -> List[str]:
@@ -110,34 +130,50 @@ def validate_database(path=None) -> List[str]:
     if header != b"SQLite format 3\x00":
         return ["O arquivo selecionado não é um banco SQLite válido."]
 
-    required = _required_tables()
+    try:
+        expected_version, expected_tables = expected_schema()
+    except (OSError, sqlite3.Error) as error:
+        return [f"Não foi possível ler o esquema esperado de '{INIT_SQL_PATH}': {error}"]
+
     problems = []
 
     try:
         connection = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True)
         try:
             connection.execute("PRAGMA query_only = ON;")
+
+            found_version = connection.execute("PRAGMA user_version").fetchone()[0]
+            if found_version != expected_version:
+                problems.append(
+                    f"Versão de esquema incompatível: encontrada {found_version}, "
+                    f"esperada {expected_version}."
+                )
+
             tables = {
                 row[0]
                 for row in connection.execute(
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
-            missing_tables = sorted(table for table in required if table not in tables)
+            missing_tables = sorted(
+                table for table in expected_tables if table not in tables
+            )
             if missing_tables:
                 problems.append("Tabelas ausentes: " + ", ".join(missing_tables) + ".")
 
-            for table in sorted(required):
+            for table in sorted(expected_tables):
                 if table in missing_tables:
                     continue
                 existing = {
                     row[1]
                     for row in connection.execute(f'PRAGMA table_info("{table}")')
                 }
-                missing_columns = sorted(required[table] - existing)
+                missing_columns = sorted(set(expected_tables[table]) - existing)
                 if missing_columns:
                     problems.append(
-                        f'Colunas ausentes em "{table}": ' + ", ".join(missing_columns) + "."
+                        f'Colunas ausentes em "{table}": '
+                        + ", ".join(missing_columns)
+                        + "."
                     )
         finally:
             connection.close()

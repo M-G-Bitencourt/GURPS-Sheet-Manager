@@ -148,6 +148,50 @@
         {% endif %}
     </section>
 
+    {% if combat_effects %}
+    <section class="section">
+        <h2 class="section__title">Efeitos de Combate</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Efeito</th>
+                    <th>Tipo</th>
+                    <th>Alvo</th>
+                    <th class="text-right">Valor</th>
+                    <th class="text-right">Usos/Turno</th>
+                    <th>Notas</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for effect in combat_effects %}
+                <tr>
+                    <td>{{ effect.item_label }}</td>
+                    <td>{{ combat_effect_labels.get(effect.item_applies_to, effect.item_applies_to) }}</td>
+                    <td>
+                        {% if effect.item_applies_to in combat_effect_targetable_types %}
+                        {{ combat_effect_target_labels.get(effect.item_target, 'Genérico') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-right">{{ '+' if effect.item_value > 0 else '' }}{{ effect.item_value }}</td>
+                    <td class="text-right">
+                        {% if effect.item_applies_to in passive_combat_effect_types %}
+                        Passivo
+                        {% elif effect.item_uses_per_turn > 0 %}
+                        {{ effect.item_uses_per_turn }}
+                        {% else %}
+                        Ilimitado
+                        {% endif %}
+                    </td>
+                    <td>{{ effect.item_notes or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
     <section class="section">
         <h2 class="section__title">Perícias</h2>
         {% if skills %}
@@ -284,7 +328,7 @@
                     {% endif %}
                 </div>
                 <div class="weapon-block__stats">
-                    NT {{ weapon.tl }} &middot; ST {{ weapon.min_st }}{% if weapon.is_two_handed %} &middot; Duas Mãos{% endif %} &middot; Peso {{ '%.2f'|format(weapon.weight) }} kg &middot; $ {{ '%.2f'|format(weapon.cost) }}
+                    NT {{ weapon.tl }} &middot; ST {{ weapon.min_st }}{% if weapon.is_two_handed %} &middot; Duas Mãos{% endif %}{% if weapon.is_unarmed %} &middot; Desarmado{% endif %}{% if weapon.is_fallback %} &middot; Fallback{% endif %} &middot; Peso {{ '%.2f'|format(weapon.weight) }} kg &middot; $ {{ '%.2f'|format(weapon.cost) }}
                 </div>
                 {% if weapon.modes %}
                 <table class="data-table data-table--compact">
@@ -293,6 +337,7 @@
                             <th>Modo</th>
                             <th>Perícia</th>
                             <th>Dano</th>
+                            <th>Mod. Ataque</th>
                             <th>Alcance</th>
                             <th>Aparar</th>
                             <th>Notas</th>
@@ -302,8 +347,9 @@
                         {% for mode in weapon.modes %}
                         <tr>
                             <td>{{ mode.mode_name }}</td>
-                            <td>{{ mode.skill_name }}</td>
+                            <td>{{ mode.skill_name or '-' }}</td>
                             <td>{{ mode.damage_base }}{{ '+' if mode.damage_modifier >= 0 else '' }}{{ mode.damage_modifier }} {{ mode.damage_type }}</td>
+                            <td>{{ mode.attack_modifier }}</td>
                             <td>{{ mode.reach }}</td>
                             <td>{{ mode.parry }}</td>
                             <td>{{ mode.notes or '-' }}</td>
@@ -326,6 +372,7 @@
             <thead>
                 <tr>
                     <th>Arma</th>
+                    <th>Perícia</th>
                     <th>Dano</th>
                     <th>Acc</th>
                     <th>1/2D</th>
@@ -344,6 +391,7 @@
                 {% for weapon in inventory.ranged_weapons %}
                 <tr>
                     <td>{{ weapon.name }}</td>
+                    <td>{{ weapon.skill_name or '-' }}</td>
                     <td>{{ weapon.damage or '-' }}</td>
                     <td>{{ weapon.acc }}</td>
                     <td>{{ weapon.range_half or '-' }}</td>
@@ -372,6 +420,7 @@
                     <th>Peça</th>
                     <th class="text-right">RD</th>
                     <th>Parte</th>
+                    <th class="text-right">Camada</th>
                     <th class="text-right">Peso</th>
                     <th class="text-right">Custo</th>
                     <th class="text-right">Qtd</th>
@@ -384,6 +433,7 @@
                     <td>{{ armor.custom_name or armor.material_name }}</td>
                     <td class="text-right">{{ armor.dr }}</td>
                     <td>{{ armor.body_part_name }}</td>
+                    <td class="text-right">{{ armor.layer_order }}</td>
                     <td class="text-right">{{ '%.2f'|format(armor.weight) }}</td>
                     <td class="text-right">{{ '%.2f'|format(armor.cost) }}</td>
                     <td class="text-right">{{ armor.quantity }}</td>

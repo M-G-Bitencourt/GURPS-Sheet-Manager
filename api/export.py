@@ -8,6 +8,12 @@ from flask import Blueprint, Response, current_app
 from weasyprint import HTML
 
 from api.characters import get_character_details
+from api.resources import (
+    COMBAT_EFFECT_TARGET_LABELS,
+    COMBAT_EFFECT_TARGETABLE_TYPES,
+    COMBAT_EFFECT_TYPE_LABELS,
+    PASSIVE_COMBAT_EFFECT_TYPES,
+)
 
 export_blueprint = Blueprint("export", __name__, url_prefix="/api")
 
@@ -34,6 +40,11 @@ def build_report_context(character_id: int) -> dict:
         "spells": details["spells"],
         "advantages": details["advantages"],
         "disadvantages": details["disadvantages"],
+        "combat_effects": details["combat_effects"],
+        "combat_effect_labels": COMBAT_EFFECT_TYPE_LABELS,
+        "combat_effect_target_labels": COMBAT_EFFECT_TARGET_LABELS,
+        "combat_effect_targetable_types": COMBAT_EFFECT_TARGETABLE_TYPES,
+        "passive_combat_effect_types": PASSIVE_COMBAT_EFFECT_TYPES,
         "additional_stats": details["additional_stats"],
         "inventory": details["inventory"],
         "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),

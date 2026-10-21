@@ -14,6 +14,7 @@ TRAIT_RESOURCES = (
     "advantages",
     "disadvantages",
     "additional-stats",
+    "combat-effects",
 )
 
 for _resource_key in TRAIT_RESOURCES:

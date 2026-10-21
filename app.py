@@ -10,12 +10,17 @@ from api.errors import ApiError
 from api.export import export_blueprint
 from api.meta import meta_blueprint
 from api.traits import traits_blueprint
-from database.migration import apply_migrations
+from database.connection import initialize_database, validate_database
 
 
 def create_app() -> Flask:
-    """Builds the Flask application and guarantees the schema is up to date."""
-    apply_migrations()
+    """Builds the Flask application and guarantees the active schema is valid."""
+    initialize_database()
+    problems = validate_database()
+    if problems:
+        raise RuntimeError(
+            "Banco de dados incompatível com o esquema atual: " + " ".join(problems)
+        )
 
     app = Flask(__name__, static_folder="static", static_url_path="/static")
     app.config["JSON_SORT_KEYS"] = False

@@ -38,6 +38,14 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _reject_incompatible(target: Path, problems) -> None:
+    raise SystemExit(
+        f"O banco '{target}' nao e compativel com o esquema atual: "
+        + " ".join(problems)
+        + " Informe um banco compatível com o esquema atual com --database."
+    )
+
+
 def configure_database(arguments: argparse.Namespace) -> None:
     """Resolves the initial database path: CLI argument, stored preference, default."""
     if arguments.database:
@@ -45,12 +53,12 @@ def configure_database(arguments: argparse.Namespace) -> None:
         if target.exists():
             problems = validate_database(target)
             if problems:
-                raise SystemExit(
-                    "O banco indicado em --database nao e compativel: "
-                    + " ".join(problems)
-                )
+                _reject_incompatible(target, problems)
         else:
             initialize_database(target)
+            problems = validate_database(target)
+            if problems:
+                _reject_incompatible(target, problems)
             print(f"Banco de dados criado em {target}")
         set_database_path(target)
         store_database_path(target)
@@ -62,7 +70,7 @@ def configure_database(arguments: argparse.Namespace) -> None:
         if not stored.is_file():
             print(
                 f"Aviso: o banco configurado nao foi encontrado ({stored}). "
-                "Usando o banco padrao."
+                "Verificando o banco padrao."
             )
         else:
             problems = validate_database(stored)
@@ -70,12 +78,22 @@ def configure_database(arguments: argparse.Namespace) -> None:
                 print(
                     f"Aviso: o banco configurado e incompativel ({stored}): "
                     + " ".join(problems)
-                    + " Usando o banco padrao."
+                    + " Verificando o banco padrao."
                 )
             else:
                 set_database_path(stored)
                 push_recent_database(stored)
                 return
+
+    if DEFAULT_DATABASE_PATH.is_file():
+        problems = validate_database(DEFAULT_DATABASE_PATH)
+        if problems:
+            _reject_incompatible(DEFAULT_DATABASE_PATH, problems)
+    else:
+        initialize_database(DEFAULT_DATABASE_PATH)
+        problems = validate_database(DEFAULT_DATABASE_PATH)
+        if problems:
+            _reject_incompatible(DEFAULT_DATABASE_PATH, problems)
 
     set_database_path(DEFAULT_DATABASE_PATH)
     push_recent_database(DEFAULT_DATABASE_PATH)

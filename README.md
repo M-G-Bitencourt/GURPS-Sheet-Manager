@@ -30,8 +30,9 @@ Além das fichas, o GURPS-Sheet-Manager é a **principal ferramenta para editar 
 - **Perícias e magias** — catálogo com atributo, dificuldade, nível, NH e descrição; vínculo por personagem com nível relativo.
 - **Vantagens e desvantagens** — custo em pontos, descrição e anotações específicas de cada personagem.
 - **Stats adicionais** — campos extras configuráveis e valores individuais por ficha.
-- **Equipamentos** — itens, armas corpo a corpo com modos de ataque, armas à distância, materiais de armadura e partes do corpo.
-- **Inventário** — quantidades, itens equipados, munição atual e armaduras por parte do corpo.
+- **Efeitos de combate** — catálogo global com tipos ativos e passivos, alvos, valores, usos por turno e vínculo por personagem; edições no catálogo são retroativas aos vínculos.
+- **Equipamentos** — itens, armas corpo a corpo com modos de ataque (perícia, modificador de ataque e ataques desarmados), armas à distância com perícia, materiais de armadura e partes do corpo.
+- **Inventário** — quantidades, itens equipados, munição atual e armaduras por parte do corpo e camada.
 - **Catálogos reutilizáveis** — cadastre um equipamento, perícia ou magia uma vez e reutilize em qualquer personagem.
 - **Exportação em PDF** — gere a ficha completa em PDF com um clique.
 - **Múltiplos bancos de dados** — abra, crie e alterne entre arquivos SQLite; o app valida o esquema e mantém a lista de recentes.
@@ -43,6 +44,10 @@ Além das fichas, o GURPS-Sheet-Manager é a **principal ferramenta para editar 
 O [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master) é um bot de Discord para GURPS que automatiza rolagens, cálculos de dano e o acompanhamento de fichas durante as sessões. O GURPS-Sheet-Manager é a **principal ferramenta para editar o banco de dados utilizado por ele**.
 
 Na aba **Banco de Dados**, selecione o arquivo SQLite do Dice-Master para gerenciar personagens, perícias, magias, vantagens, desvantagens, equipamentos e inventário com uma interface visual, sem precisar editar o banco manualmente. O esquema do arquivo é validado antes da abertura, evitando alterações em bancos incompatíveis.
+
+O esquema atual é a **versão 11** (`PRAGMA user_version = 11`). Bancos de versões anteriores não são migrados nem aceitos; crie ou selecione um banco novo. As tabelas de estado em tempo real do Dice-Master (`combat_sessions`, `pending_attacks`, `combat_participants`, `combat_log`) são apenas validadas pelo gerenciador. Já o catálogo `combat_effects` e os vínculos `character_combat_effects` são editáveis na aba **Magias e Traços** e na ficha do personagem.
+
+Efeitos passivos (`st`, `dx`, `iq`, `ht`, `max_pv`, `max_pf`, `will`, `per`, `basic_speed`, `basic_move`, `ht_check` e `rd`) não consomem usos por turno e afetam somente o combate do Dice-Master. A ficha e o admin continuam exibindo os valores base do personagem.
 
 ## Telas
 
@@ -141,10 +146,11 @@ O navegador abre automaticamente em `http://127.0.0.1:5000/`. Por padrão, o ban
 ├── app.py                 # Fábrica da aplicação Flask
 ├── run.py                 # Ponto de entrada e configuração do banco
 ├── api/                   # Rotas REST, CRUD genérico e exportação em PDF
-├── database/              # Conexão SQLite, migrações e preferências
+├── database/              # Conexão SQLite, validação de esquema e preferências
 ├── data/                  # init.sql e banco padrão (gerado em tempo de execução)
 ├── static/                # Interface web (HTML, CSS e JavaScript)
 ├── templates/             # Template HTML da ficha exportada em PDF
+├── tests/                 # Testes de esquema e da API
 ├── git-assets/            # Imagens usadas neste README
 ├── requirements.txt
 └── LICENSE

@@ -10,6 +10,7 @@ import {
     defaultsFromColumns,
     el,
     formatNumber,
+    loadLookup,
     openModal,
     readFormValues,
     showToast,
@@ -38,6 +39,19 @@ const TABLE_COLUMNS = {
         {
             label: 'Duas Mãos',
             render: (row) => (row.is_two_handed ? buildBadge('SIM') : '-'),
+        },
+        {
+            label: 'Tipo',
+            render: (row) => {
+                const labels = [];
+                if (row.is_unarmed) {
+                    labels.push('DESARMADO');
+                }
+                if (row.is_fallback) {
+                    labels.push('FALLBACK');
+                }
+                return labels.length ? buildBadge(labels.join(' / ')) : '-';
+            },
         },
         { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
         { label: 'Custo ($)', class: 'text-right', render: (row) => formatNumber(row.cost) },
@@ -139,6 +153,12 @@ function modeColumns(schemas) {
 async function openModesModal(schemas, weapon) {
     const listContainer = el('div');
     const errorNode = el('div', { class: 'form-error hidden' });
+    const modeLookups = { skills: [] };
+    try {
+        modeLookups.skills = await loadLookup('skills', 'skill_id', 'name');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
 
     const addButton = el('button', {
         type: 'button',
@@ -169,11 +189,12 @@ async function openModesModal(schemas, weapon) {
             listContainer.append(buildTable({
                 columns: [
                     { label: 'Modo', render: (row) => row.mode_name },
-                    { label: 'Perícia', render: (row) => row.skill_name },
+                    { label: 'Perícia', render: (row) => row.skill_name ?? '-' },
                     {
                         label: 'Dano',
                         render: (row) => `${row.damage_base}${row.damage_modifier >= 0 ? '+' : ''}${row.damage_modifier} ${row.damage_type}`,
                     },
+                    { label: 'Mod. Ataque', class: 'text-right', render: (row) => row.attack_modifier ?? 0 },
                     { label: 'Alcance', render: (row) => row.reach },
                     { label: 'Aparar', render: (row) => row.parry },
                     { label: 'Notas', render: (row) => truncatedText(row.notes) },
@@ -211,7 +232,7 @@ async function openModesModal(schemas, weapon) {
     function openModeForm(mode) {
         const columns = modeColumns(schemas);
         const values = mode || defaultsFromColumns(columns);
-        const form = buildForm(columns, values);
+        const form = buildForm(columns, values, modeLookups);
         const formError = el('div', { class: 'form-error hidden' });
         form.append(formError);
 

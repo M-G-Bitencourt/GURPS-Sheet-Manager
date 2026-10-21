@@ -167,6 +167,11 @@ def create_row(resource_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         elif column.default is not None:
             values[column.name] = column.default
 
+    if resource.validator is not None:
+        overrides = resource.validator(values)
+        if overrides:
+            values.update(overrides)
+
     connection = get_connection()
     try:
         ensure_unique_columns(connection, resource, values)
@@ -213,6 +218,13 @@ def update_row(
 
     if not updates:
         return get_row(resource_key, primary_key)
+
+    if resource.validator is not None:
+        merged = get_row(resource_key, primary_key)
+        merged.update(updates)
+        overrides = resource.validator(merged)
+        if overrides:
+            updates.update(overrides)
 
     assignments = ", ".join(f'"{name}" = ?' for name in updates)
     query = (

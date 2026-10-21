@@ -1,9 +1,9 @@
 """Declarative registry describing every table exposed by the REST API."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
-from api.errors import NotFoundError
+from api.errors import ApiError, NotFoundError
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,7 @@ class Resource:
     order_by: Optional[str] = None
     delete_blocked_hint: Optional[str] = None
     unique_columns: Tuple[str, ...] = ()
+    validator: Optional[Callable[[Dict[str, Any]], Optional[Dict[str, Any]]]] = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,117 @@ ATTRIBUTE_OPTIONS = ("ST", "DX", "IQ", "HT", "Per", "Vont")
 SPELL_RESOURCE_OPTIONS = ("PV", "PF", "ER")
 DAMAGE_BASE_OPTIONS = ("GeB", "GdP", "espec.")
 DAMAGE_TYPE_OPTIONS = ("corte", "contusão", "perfuração", "espec.")
+
+COMBAT_EFFECT_APPLIES_TO = (
+    "attack",
+    "damage",
+    "defense",
+    "dodge",
+    "parry",
+    "extra_defense_attempts",
+    "extra_defense_uses",
+    "st",
+    "dx",
+    "iq",
+    "ht",
+    "max_pv",
+    "max_pf",
+    "will",
+    "per",
+    "basic_speed",
+    "basic_move",
+    "ht_check",
+    "rd",
+)
+COMBAT_EFFECT_TARGET_RULES = {
+    "dodge": (None, "dodge"),
+    "parry": (None, "parry"),
+    "extra_defense_uses": (None, "dodge", "parry"),
+}
+COMBAT_EFFECT_TARGET_OPTIONS = ("dodge", "parry")
+COMBAT_EFFECT_TARGETABLE_TYPES = frozenset(COMBAT_EFFECT_TARGET_RULES)
+PASSIVE_COMBAT_EFFECT_TYPES = frozenset(
+    {
+        "st",
+        "dx",
+        "iq",
+        "ht",
+        "max_pv",
+        "max_pf",
+        "will",
+        "per",
+        "basic_speed",
+        "basic_move",
+        "ht_check",
+        "rd",
+    }
+)
+COMBAT_EFFECT_TYPE_LABELS = {
+    "attack": "Ataque",
+    "damage": "Dano",
+    "defense": "Defesa",
+    "dodge": "Esquiva",
+    "parry": "Aparar",
+    "extra_defense_attempts": "Tentativas extras de defesa",
+    "extra_defense_uses": "Usos extras de defesa",
+    "st": "ST adicional",
+    "dx": "DX adicional",
+    "iq": "IQ adicional",
+    "ht": "HT adicional",
+    "max_pv": "PV máximo adicional",
+    "max_pf": "PF máximo adicional",
+    "will": "Vontade adicional",
+    "per": "Percepção adicional",
+    "basic_speed": "Velocidade Básica adicional",
+    "basic_move": "Deslocamento Básico adicional",
+    "ht_check": "Testes de HT (morte/consciência)",
+    "rd": "RD adicional",
+}
+COMBAT_EFFECT_TARGET_LABELS = {
+    None: "Genérico",
+    "dodge": "Esquiva",
+    "parry": "Aparar",
+}
+
+
+def validate_combat_effect(values: Dict[str, Any]) -> Dict[str, Any]:
+    """Validates the effect and returns fields the backend must normalize."""
+    name = values.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ApiError("O campo 'Nome' é obrigatório.")
+
+    applies_to = values.get("applies_to")
+    if applies_to not in COMBAT_EFFECT_APPLIES_TO:
+        raise ApiError("O campo 'Tipo do Efeito' contém um valor inválido.")
+
+    value = values.get("value")
+    if value is None:
+        raise ApiError("O campo 'Valor' é obrigatório.")
+
+    if applies_to in PASSIVE_COMBAT_EFFECT_TYPES:
+        return {"target": None, "uses_per_turn": 0}
+
+    uses_per_turn = values.get("uses_per_turn")
+    if uses_per_turn is None:
+        raise ApiError("O campo 'Usos por Turno' é obrigatório.")
+    if uses_per_turn < 0:
+        raise ApiError("O campo 'Usos por Turno' não pode ser negativo.")
+
+    allowed_targets = COMBAT_EFFECT_TARGET_RULES.get(applies_to)
+    if allowed_targets is None:
+        return {"target": None}
+
+    target = values.get("target")
+    if target not in allowed_targets:
+        allowed_text = ", ".join(
+            "genérico" if item is None else f"'{item}'"
+            for item in allowed_targets
+        )
+        raise ApiError(
+            f"Para este tipo de efeito, o alvo deve ser {allowed_text}."
+        )
+
+    return {}
 
 
 CHARACTER_COLUMNS = (
@@ -131,6 +243,8 @@ RESOURCES = {
             Column("weight", "Peso (kg)", "float", default=0.0),
             Column("cost", "Custo ($)", "float", default=0.0),
             Column("description", "Descrição", "text", multiline=True),
+            Column("is_unarmed", "Desarmado", "bool", default=0),
+            Column("is_fallback", "Fallback", "bool", default=0),
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
@@ -152,7 +266,13 @@ RESOURCES = {
                 fk_label="name",
             ),
             Column("mode_name", "Modo", "text", default="Padrão"),
-            Column("skill_name", "Perícia", "text", required=True),
+            Column(
+                "skill_id",
+                "Perícia",
+                "fk",
+                fk_resource="skills",
+                fk_label="name",
+            ),
             Column(
                 "damage_base",
                 "Base de Dano",
@@ -161,6 +281,7 @@ RESOURCES = {
                 options=DAMAGE_BASE_OPTIONS,
             ),
             Column("damage_modifier", "Modificador de Dano", "int", default=0),
+            Column("attack_modifier", "Modificador de Ataque", "int", default=0),
             Column(
                 "damage_type",
                 "Tipo de Dano",
@@ -181,6 +302,13 @@ RESOURCES = {
         label="Armas à Distância",
         columns=(
             Column("name", "Nome", "text", required=True),
+            Column(
+                "skill_id",
+                "Perícia",
+                "fk",
+                fk_resource="skills",
+                fk_label="name",
+            ),
             Column("damage", "Dano", "text"),
             Column("acc", "Precisão (Acc)", "int", default=0),
             Column("range_half", "Alcance 1/2D", "int"),
@@ -251,6 +379,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
+        delete_blocked_hint="Existem armas ou modos de ataque usando esta perícia.",
         unique_columns=("name",),
     ),
     "spells": Resource(
@@ -340,6 +469,35 @@ RESOURCES = {
         search_columns=("stat",),
         order_by="stat COLLATE NOCASE ASC",
     ),
+    "combat-effects": Resource(
+        key="combat-effects",
+        table="combat_effects",
+        pk="effect_id",
+        label="Efeitos de Combate",
+        columns=(
+            Column("name", "Nome", "text", required=True),
+            Column(
+                "applies_to",
+                "Tipo do Efeito",
+                "select",
+                required=True,
+                options=COMBAT_EFFECT_APPLIES_TO,
+            ),
+            Column(
+                "target",
+                "Alvo",
+                "select",
+                options=COMBAT_EFFECT_TARGET_OPTIONS,
+            ),
+            Column("value", "Valor", "int", default=0),
+            Column("uses_per_turn", "Usos por Turno (0 = ilimitado)", "int", default=0),
+            Column("notes", "Notas", "text", multiline=True),
+        ),
+        search_columns=("name", "applies_to", "effect_id"),
+        order_by="name COLLATE NOCASE ASC, effect_id ASC",
+        unique_columns=("name",),
+        validator=validate_combat_effect,
+    ),
 }
 
 
@@ -392,6 +550,22 @@ RELATIONS = {
         item_label="stat",
         columns=(Column("value", "Valor", "int", default=0),),
     ),
+    "combat-effects": Relation(
+        key="combat-effects",
+        table="character_combat_effects",
+        pk="effect_id",
+        label="Efeitos de Combate",
+        item_fk="effect_id",
+        item_resource="combat-effects",
+        columns=(),
+        item_columns=(
+            ("item_applies_to", "applies_to"),
+            ("item_target", "target"),
+            ("item_value", "value"),
+            ("item_uses_per_turn", "uses_per_turn"),
+            ("item_notes", "notes"),
+        ),
+    ),
     "items": Relation(
         key="items",
         table="character_items",
@@ -441,6 +615,7 @@ RELATIONS = {
             Column("custom_name", "Nome Personalizado", "text"),
             Column("quantity", "Quantidade", "int", default=1),
             Column("is_equipped", "Equipado", "bool", default=0),
+            Column("layer_order", "Camada", "int", default=0),
         ),
         secondary_fk="body_part_id",
         secondary_resource="body-parts",

@@ -205,6 +205,23 @@ function buildField(column, value, lookups) {
             missing.selected = true;
             input.append(missing);
         }
+    } else if (column.type === 'select') {
+        input = el('select', { name: column.name, id: inputId });
+        if (!column.required) {
+            input.append(el('option', { value: '', text: '-- Selecione --' }));
+        }
+        const options = [...column.options];
+        const hasValue = value !== null && value !== undefined && String(value) !== '';
+        if (hasValue && !options.includes(String(value))) {
+            options.push(String(value));
+        }
+        for (const option of options) {
+            const optionNode = el('option', { value: option, text: option });
+            if (hasValue && String(value) === option) {
+                optionNode.selected = true;
+            }
+            input.append(optionNode);
+        }
     } else if (column.type === 'enum') {
         const listId = `${inputId}-list`;
         input = el('input', { type: 'text', name: column.name, id: inputId, list: listId });
@@ -382,6 +399,7 @@ export class EntityManager {
         emptyMessage = 'Nenhum registro encontrado.',
         extraActions = [],
         prepare = null,
+        prepareForm = null,
     }) {
         this.schemas = schemas;
         this.resource = schemas.resources[resourceKey];
@@ -391,6 +409,7 @@ export class EntityManager {
         this.emptyMessage = emptyMessage;
         this.extraActions = extraActions;
         this.prepare = prepare;
+        this.prepareForm = prepareForm;
         this.rows = [];
         this.searchTerm = '';
         this.tableContainer = el('div');
@@ -472,6 +491,9 @@ export class EntityManager {
 
         const values = row || defaultsFromColumns(this.resource.columns);
         const form = buildForm(this.resource.columns, values, lookups);
+        if (this.prepareForm) {
+            this.prepareForm(form, values);
+        }
         const errorNode = el('div', { class: 'form-error hidden' });
         form.append(errorNode);
 

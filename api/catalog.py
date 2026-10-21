@@ -27,11 +27,13 @@ def list_weapon_modes(melee_weapon_id: int):
     try:
         rows = connection.execute(
             """
-            SELECT mode_id, melee_weapon_id, mode_name, skill_name, damage_base,
-                   damage_modifier, damage_type, reach, parry, notes
-            FROM melee_weapon_modes
-            WHERE melee_weapon_id = ?
-            ORDER BY mode_id ASC
+            SELECT m.mode_id, m.melee_weapon_id, m.mode_name, m.skill_id,
+                   s.name AS skill_name, m.damage_base, m.damage_modifier,
+                   m.attack_modifier, m.damage_type, m.reach, m.parry, m.notes
+            FROM melee_weapon_modes m
+            LEFT JOIN skills s ON m.skill_id = s.skill_id
+            WHERE m.melee_weapon_id = ?
+            ORDER BY m.mode_id ASC
             """,
             (melee_weapon_id,),
         ).fetchall()

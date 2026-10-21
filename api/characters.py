@@ -34,11 +34,10 @@ def _relation_item_label_column(relation: Relation) -> str:
 def _relation_select(relation: Relation) -> str:
     """Builds the shared SELECT used to list relation rows with joined labels."""
     item_resource = get_resource(relation.item_resource)
-    parts = [
-        f'r."{relation.pk}"',
-        f'r."{relation.item_fk}"',
-        f'i."{_relation_item_label_column(relation)}" AS item_label',
-    ]
+    parts = [f'r."{relation.pk}"']
+    if relation.item_fk != relation.pk:
+        parts.append(f'r."{relation.item_fk}"')
+    parts.append(f'i."{_relation_item_label_column(relation)}" AS item_label')
 
     for column in relation.columns:
         parts.append(f'r."{column.name}" AS "{column.name}"')
@@ -139,7 +138,7 @@ def create_relation(
     try:
         cursor = connection.execute(query, [values[name] for name in column_names])
         connection.commit()
-        new_id = cursor.lastrowid
+        new_id = values.get(relation.pk, cursor.lastrowid)
     except sqlite3.IntegrityError as error:
         resource = get_resource(relation.item_resource)
         raise translate_integrity_error(resource, error) from error
@@ -441,6 +440,7 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
         """
         SELECT cmw.character_melee_id, cmw.melee_weapon_id, w.name, w.tl,
                w.min_st, w.is_two_handed, w.weight, w.cost, w.description,
+               w.is_unarmed, w.is_fallback,
                cmw.custom_name, cmw.quantity, cmw.is_equipped
         FROM character_melee_weapons cmw
         JOIN melee_weapons w ON cmw.melee_weapon_id = w.melee_weapon_id
@@ -453,11 +453,13 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
     for row in melee_rows:
         mode_rows = connection.execute(
             """
-            SELECT mode_id, mode_name, skill_name, damage_base, damage_modifier,
-                   damage_type, reach, parry, notes
-            FROM melee_weapon_modes
-            WHERE melee_weapon_id = ?
-            ORDER BY mode_id ASC
+            SELECT m.mode_id, m.mode_name, m.skill_id, s.name AS skill_name,
+                   m.damage_base, m.damage_modifier, m.attack_modifier,
+                   m.damage_type, m.reach, m.parry, m.notes
+            FROM melee_weapon_modes m
+            LEFT JOIN skills s ON m.skill_id = s.skill_id
+            WHERE m.melee_weapon_id = ?
+            ORDER BY m.mode_id ASC
             """,
             (row["melee_weapon_id"],),
         ).fetchall()
@@ -472,6 +474,8 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
                 "weight": row["weight"] or 0.0,
                 "cost": row["cost"] or 0.0,
                 "description": row["description"],
+                "is_unarmed": row["is_unarmed"] or 0,
+                "is_fallback": row["is_fallback"] or 0,
                 "custom_name": row["custom_name"],
                 "quantity": row["quantity"] or 1,
                 "is_equipped": row["is_equipped"] or 0,
@@ -479,9 +483,11 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
                     {
                         "mode_id": mode["mode_id"],
                         "mode_name": mode["mode_name"],
+                        "skill_id": mode["skill_id"],
                         "skill_name": mode["skill_name"],
                         "damage_base": mode["damage_base"],
                         "damage_modifier": mode["damage_modifier"] or 0,
+                        "attack_modifier": mode["attack_modifier"] or 0,
                         "damage_type": mode["damage_type"],
                         "reach": mode["reach"],
                         "parry": mode["parry"],
@@ -494,12 +500,13 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
 
     ranged_rows = connection.execute(
         """
-        SELECT crw.character_ranged_id, crw.ranged_weapon_id, w.name, w.damage,
-               w.acc, w.range_half, w.range_max, w.rof, w.shots, w.min_st,
-               w.recoil, w.weight, w.cost, w.description,
+        SELECT crw.character_ranged_id, crw.ranged_weapon_id, w.name, w.skill_id,
+               s.name AS skill_name, w.damage, w.acc, w.range_half, w.range_max,
+               w.rof, w.shots, w.min_st, w.recoil, w.weight, w.cost, w.description,
                crw.quantity, crw.current_shots, crw.is_equipped
         FROM character_ranged_weapons crw
         JOIN ranged_weapons w ON crw.ranged_weapon_id = w.ranged_weapon_id
+        LEFT JOIN skills s ON w.skill_id = s.skill_id
         WHERE crw.character_id = ?
         ORDER BY crw.is_equipped DESC, w.name COLLATE NOCASE ASC
         """,
@@ -510,6 +517,8 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
             "character_ranged_id": row["character_ranged_id"],
             "ranged_weapon_id": row["ranged_weapon_id"],
             "name": row["name"],
+            "skill_id": row["skill_id"],
+            "skill_name": row["skill_name"],
             "damage": row["damage"],
             "acc": row["acc"] or 0,
             "range_half": row["range_half"],
@@ -533,12 +542,13 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
         SELECT ca.character_armor_id, ca.material_id, ca.body_part_id,
                m.name AS material_name, m.dr, m.is_flexible, m.don_time,
                m.notes, m.weight_torso, m.cost_torso, bp.name AS body_part_name,
-               bp.cost_weight_factor, ca.custom_name, ca.quantity, ca.is_equipped
+               bp.cost_weight_factor, ca.custom_name, ca.quantity, ca.is_equipped,
+               ca.layer_order
         FROM character_armors ca
         JOIN armor_materials m ON ca.material_id = m.material_id
         JOIN body_parts bp ON ca.body_part_id = bp.body_part_id
         WHERE ca.character_id = ?
-        ORDER BY ca.is_equipped DESC, bp.body_part_id ASC
+        ORDER BY ca.is_equipped DESC, bp.body_part_id ASC, ca.layer_order ASC
         """,
         (character_id,),
     ).fetchall()
@@ -560,6 +570,7 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
                 "custom_name": row["custom_name"],
                 "quantity": quantity,
                 "is_equipped": row["is_equipped"] or 0,
+                "layer_order": row["layer_order"] or 0,
                 "weight": round((row["weight_torso"] or 0.0) * factor * quantity, 3),
                 "cost": round((row["cost_torso"] or 0.0) * factor * quantity, 2),
             }
@@ -604,6 +615,7 @@ def get_character_details(character_id: int) -> Dict[str, Any]:
     advantages = _trait_entries("advantages", character_id)
     disadvantages = _trait_entries("disadvantages", character_id)
     additional_stat_entries = list_relations(character_id, "additional-stats")
+    combat_effects = list_relations(character_id, "combat-effects")
 
     st = int(character["st"] or 0)
     dx = int(character["dx"] or 0)
@@ -679,6 +691,7 @@ def get_character_details(character_id: int) -> Dict[str, Any]:
         "spells": spells,
         "advantages": advantages,
         "disadvantages": disadvantages,
+        "combat_effects": combat_effects,
         "inventory": inventory,
     }
 
