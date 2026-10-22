@@ -187,7 +187,7 @@ CHARACTER_COLUMNS = (
     Column("additional_vont", "Vont Adicional", "int", default=0),
     Column("additional_per", "Per Adicional", "int", default=0),
     Column("additional_max_pf", "PF Adicional", "int", default=0),
-    Column("additional_basic_speed", "Vel. Básica Adicional", "int", default=0),
+    Column("additional_basic_speed", "Vel. Básica Adicional", "float", default=0.0),
     Column("additional_basic_move", "Deslocamento Adicional", "int", default=0),
     Column("energy_reserve", "Reserva de Energia", "int", default=0),
     Column(

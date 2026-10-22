@@ -55,6 +55,47 @@ class ApiTestCase(unittest.TestCase):
         }
         self.assertIn("layer_order", armor_columns)
 
+    def test_character_additional_basic_speed_accepts_float(self):
+        schemas = self.client.get("/api/schemas").get_json()
+        speed_column = next(
+            column
+            for column in schemas["resources"]["characters"]["columns"]
+            if column["name"] == "additional_basic_speed"
+        )
+        self.assertEqual(speed_column["type"], "float")
+
+        character = self.create(
+            "/api/characters",
+            {
+                "name": "Personagem Veloz",
+                "dx": 10,
+                "ht": 10,
+                "additional_basic_speed": 0.75,
+            },
+        )
+        self.assertEqual(character["additional_basic_speed"], 0.75)
+
+        details = self.client.get(
+            f"/api/characters/{character['character_id']}/details"
+        ).get_json()
+        self.assertEqual(details["character"]["additional_basic_speed"], 0.75)
+        self.assertEqual(details["derived"]["basic_speed"], 5.75)
+        self.assertEqual(details["derived"]["basic_move"], 5)
+        self.assertEqual(details["points"]["secondary"]["speed"], 15)
+
+        response = self.client.put(
+            f"/api/characters/{character['character_id']}",
+            json={"additional_basic_speed": 0.25},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["additional_basic_speed"], 0.25)
+
+        details = self.client.get(
+            f"/api/characters/{character['character_id']}/details"
+        ).get_json()
+        self.assertEqual(details["derived"]["basic_speed"], 5.25)
+        self.assertEqual(details["points"]["secondary"]["speed"], 5)
+
     def test_melee_modes_resolve_skill_name(self):
         skill = self.create(
             "/api/skills",

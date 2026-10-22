@@ -626,7 +626,7 @@ def get_character_details(character_id: int) -> Dict[str, Any]:
     additional_vont = int(character["additional_vont"] or 0)
     additional_pv = int(character["additional_max_pv"] or 0)
     additional_pf = int(character["additional_max_pf"] or 0)
-    additional_speed = int(character["additional_basic_speed"] or 0)
+    additional_speed = float(character["additional_basic_speed"] or 0)
     additional_move = int(character["additional_basic_move"] or 0)
 
     basic_speed = round((dx + ht) / 4 + additional_speed, 2)
@@ -655,7 +655,7 @@ def get_character_details(character_id: int) -> Dict[str, Any]:
         "vont": additional_vont * 5,
         "pv": additional_pv * 2,
         "pf": additional_pf * 3,
-        "speed": int((additional_speed / 0.25) * 5),
+        "speed": round(additional_speed * 20),
         "move": additional_move * 5,
     }
     secondary["total"] = sum(secondary.values())
