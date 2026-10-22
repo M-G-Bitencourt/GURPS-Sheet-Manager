@@ -270,6 +270,8 @@ CREATE TABLE "pending_attacks" (
     "rd" INTEGER NOT NULL DEFAULT 0,
     "damage_type" INTEGER NOT NULL,
     "hit_location" INTEGER NOT NULL,
+    "hit_sublocation" TEXT,
+    "hit_sublocation_roll" INTEGER,
     "feint" INTEGER NOT NULL DEFAULT 0,
     "is_critical" INTEGER NOT NULL DEFAULT 0,
     "modifiers_json" TEXT,
@@ -490,4 +492,4 @@ CREATE TABLE "character_disadvantages" (
 	FOREIGN KEY("disadvantage_id") REFERENCES "disadvantages"("disadvantage_id") ON DELETE CASCADE
 );
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;

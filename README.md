@@ -45,7 +45,7 @@ O [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master) é um bot de Disc
 
 Na aba **Banco de Dados**, selecione o arquivo SQLite do Dice-Master para gerenciar personagens, perícias, magias, vantagens, desvantagens, equipamentos e inventário com uma interface visual, sem precisar editar o banco manualmente. O esquema do arquivo é validado antes da abertura, evitando alterações em bancos incompatíveis.
 
-O esquema atual é a **versão 11** (`PRAGMA user_version = 11`). Bancos de versões anteriores não são migrados nem aceitos; crie ou selecione um banco novo. As tabelas de estado em tempo real do Dice-Master (`combat_sessions`, `pending_attacks`, `combat_participants`, `combat_log`) são apenas validadas pelo gerenciador. Já o catálogo `combat_effects` e os vínculos `character_combat_effects` são editáveis na aba **Magias e Traços** e na ficha do personagem.
+O esquema atual é a **versão 12** (`PRAGMA user_version = 12`). Bancos de versões anteriores não são migrados nem aceitos; crie ou selecione um banco novo. As tabelas de estado em tempo real do Dice-Master (`combat_sessions`, `pending_attacks`, `combat_participants`, `combat_log`) são apenas validadas pelo gerenciador. Já o catálogo `combat_effects` e os vínculos `character_combat_effects` são editáveis na aba **Magias e Traços** e na ficha do personagem.
 
 Efeitos passivos (`st`, `dx`, `iq`, `ht`, `max_pv`, `max_pf`, `will`, `per`, `basic_speed`, `basic_move`, `ht_check` e `rd`) não consomem usos por turno e afetam somente o combate do Dice-Master. A ficha e o admin continuam exibindo os valores base do personagem.
 

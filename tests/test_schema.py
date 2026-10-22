@@ -27,7 +27,7 @@ class SchemaTestCase(unittest.TestCase):
         connection = self.connect()
         try:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(version, 11)
+            self.assertEqual(version, 12)
 
             tables = {
                 row[0]
@@ -46,6 +46,13 @@ class SchemaTestCase(unittest.TestCase):
                 "guild_settings",
             ):
                 self.assertIn(table, tables)
+
+            pending_attack_columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(pending_attacks)")
+            }
+            self.assertIn("hit_sublocation", pending_attack_columns)
+            self.assertIn("hit_sublocation_roll", pending_attack_columns)
 
             mode_columns = {
                 row[1]
