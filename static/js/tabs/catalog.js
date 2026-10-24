@@ -19,8 +19,7 @@ import {
 
 const CATALOG_TABS = [
     { key: 'items', label: 'Itens' },
-    { key: 'melee-weapons', label: 'Armas Corpo a Corpo' },
-    { key: 'ranged-weapons', label: 'Armas à Distância' },
+    { key: 'weapons', label: 'Armas' },
     { key: 'armor-materials', label: 'Materiais de Armadura' },
     { key: 'body-parts', label: 'Partes do Corpo' },
 ];
@@ -32,8 +31,9 @@ const TABLE_COLUMNS = {
         { label: 'Custo ($)', class: 'text-right', render: (row) => formatNumber(row.cost) },
         { label: 'Descrição', render: (row) => truncatedText(row.description) },
     ],
-    'melee-weapons': [
+    weapons: [
         { label: 'Nome', render: (row) => row.name },
+        { label: 'Chave', render: (row) => row.key ?? '-' },
         { label: 'NT', class: 'text-right', render: (row) => row.tl ?? 0 },
         { label: 'ST Min.', class: 'text-right', render: (row) => row.min_st ?? 0 },
         {
@@ -56,19 +56,6 @@ const TABLE_COLUMNS = {
         { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
         { label: 'Custo ($)', class: 'text-right', render: (row) => formatNumber(row.cost) },
         { label: 'Descrição', render: (row) => truncatedText(row.description) },
-    ],
-    'ranged-weapons': [
-        { label: 'Nome', render: (row) => row.name },
-        { label: 'Dano', render: (row) => row.damage ?? '-' },
-        { label: 'Acc', class: 'text-right', render: (row) => row.acc ?? 0 },
-        { label: 'Alcance 1/2D', class: 'text-right', render: (row) => row.range_half ?? '-' },
-        { label: 'Alcance Máx.', class: 'text-right', render: (row) => row.range_max ?? '-' },
-        { label: 'RoF', class: 'text-right', render: (row) => row.rof ?? 1 },
-        { label: 'Tiros', render: (row) => row.shots ?? '-' },
-        { label: 'ST Min.', class: 'text-right', render: (row) => row.min_st ?? 0 },
-        { label: 'Rcl', class: 'text-right', render: (row) => row.recoil ?? 1 },
-        { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
-        { label: 'Custo ($)', class: 'text-right', render: (row) => formatNumber(row.cost) },
     ],
     'armor-materials': [
         { label: 'Nome', render: (row) => row.name },
@@ -100,7 +87,7 @@ export function initCatalogTab(schemas) {
             el('h1', { text: 'Equipamentos' }),
             el('div', {
                 class: 'page-subtitle',
-                text: 'Itens, armas corpo a corpo com modos de ataque, armas a distancia, materiais de armadura e partes do corpo.',
+                text: 'Itens, armas com modos corpo a corpo e à distância, materiais de armadura e partes do corpo.',
             }),
         ]),
     ]));
@@ -122,7 +109,7 @@ export function initCatalogTab(schemas) {
         panels[tab.key] = panel;
         subtabContainer.append(panel);
 
-        const extraActions = tab.key === 'melee-weapons'
+        const extraActions = tab.key === 'weapons'
             ? [{ label: 'Modos', onClick: (row) => openModesModal(schemas, row) }]
             : [];
 
@@ -145,17 +132,41 @@ export function initCatalogTab(schemas) {
 }
 
 function modeColumns(schemas) {
-    return schemas.resources['melee-weapon-modes'].columns.filter(
-        (column) => column.name !== 'melee_weapon_id',
+    return schemas.resources['weapon-modes'].columns.filter(
+        (column) => column.name !== 'weapon_id',
     );
+}
+
+function prepareWeaponModeForm(form) {
+    const damageBase = form.elements.namedItem('damage_base');
+    const damageDice = form.elements.namedItem('damage_dice');
+    if (!damageBase || !damageDice) {
+        return;
+    }
+
+    damageBase.addEventListener('change', () => {
+        if (damageBase.value) {
+            damageDice.value = '';
+        }
+    });
+    damageDice.addEventListener('input', () => {
+        if (damageDice.value) {
+            damageBase.value = '';
+        }
+    });
 }
 
 async function openModesModal(schemas, weapon) {
     const listContainer = el('div');
     const errorNode = el('div', { class: 'form-error hidden' });
-    const modeLookups = { skills: [] };
+    const modeLookups = { skills: [], 'damage-types': [] };
     try {
         modeLookups.skills = await loadLookup('skills', 'skill_id', 'name');
+        modeLookups['damage-types'] = await loadLookup(
+            'damage-types',
+            'damage_type_id',
+            'label',
+        );
     } catch (error) {
         showToast(error.message, 'error');
     }
@@ -176,7 +187,7 @@ async function openModesModal(schemas, weapon) {
         errorNode,
     ]);
 
-    const controller = openModal({
+    openModal({
         title: 'Modos de Ataque',
         body,
         wide: true,
@@ -184,19 +195,24 @@ async function openModesModal(schemas, weapon) {
 
     async function refresh() {
         try {
-            const modes = await api.get(`/api/melee-weapons/${weapon.melee_weapon_id}/modes`);
+            const modes = await api.get(`/api/weapons/${weapon.weapon_id}/modes`);
             clear(listContainer);
             listContainer.append(buildTable({
                 columns: [
                     { label: 'Modo', render: (row) => row.mode_name },
+                    { label: 'Tipo', render: (row) => row.attack_kind_label ?? '-' },
                     { label: 'Perícia', render: (row) => row.skill_name ?? '-' },
+                    { label: 'Dano', render: (row) => row.damage_display ?? '-' },
                     {
-                        label: 'Dano',
-                        render: (row) => `${row.damage_base}${row.damage_modifier >= 0 ? '+' : ''}${row.damage_modifier} ${row.damage_type}`,
+                        label: 'Alcance',
+                        render: (row) => row.range_display || row.reach || '-',
                     },
+                    { label: 'Acc', class: 'text-right', render: (row) => row.acc ?? '-' },
+                    { label: 'RoF', class: 'text-right', render: (row) => row.rof ?? '-' },
+                    { label: 'Tiros', render: (row) => row.shots ?? '-' },
+                    { label: 'Rcl', class: 'text-right', render: (row) => row.recoil ?? '-' },
+                    { label: 'Aparar', render: (row) => row.parry ?? '-' },
                     { label: 'Mod. Ataque', class: 'text-right', render: (row) => row.attack_modifier ?? 0 },
-                    { label: 'Alcance', render: (row) => row.reach },
-                    { label: 'Aparar', render: (row) => row.parry },
                     { label: 'Notas', render: (row) => truncatedText(row.notes) },
                 ],
                 rows: modes,
@@ -214,7 +230,7 @@ async function openModesModal(schemas, weapon) {
                                 return;
                             }
                             try {
-                                await api.delete(`/api/melee-weapon-modes/${mode.mode_id}`);
+                                await api.delete(`/api/weapon-modes/${mode.mode_id}`);
                                 showToast('Modo excluído.', 'success');
                                 await refresh();
                             } catch (error) {
@@ -233,6 +249,7 @@ async function openModesModal(schemas, weapon) {
         const columns = modeColumns(schemas);
         const values = mode || defaultsFromColumns(columns);
         const form = buildForm(columns, values, modeLookups);
+        prepareWeaponModeForm(form);
         const formError = el('div', { class: 'form-error hidden' });
         form.append(formError);
 
@@ -255,10 +272,10 @@ async function openModesModal(schemas, weapon) {
             const payload = readFormValues(form);
             try {
                 if (mode) {
-                    delete payload.melee_weapon_id;
-                    await api.put(`/api/melee-weapon-modes/${mode.mode_id}`, payload);
+                    delete payload.weapon_id;
+                    await api.put(`/api/weapon-modes/${mode.mode_id}`, payload);
                 } else {
-                    await api.post(`/api/melee-weapons/${weapon.melee_weapon_id}/modes`, payload);
+                    await api.post(`/api/weapons/${weapon.weapon_id}/modes`, payload);
                 }
                 modeController.close();
                 showToast('Modo salvo com sucesso.', 'success');

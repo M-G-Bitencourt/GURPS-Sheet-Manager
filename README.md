@@ -31,11 +31,12 @@ Além das fichas, o GURPS-Sheet-Manager é a **principal ferramenta para editar 
 - **Vantagens e desvantagens** — custo em pontos, descrição e anotações específicas de cada personagem.
 - **Stats adicionais** — campos extras configuráveis e valores individuais por ficha.
 - **Efeitos de combate** — catálogo global com tipos ativos e passivos, alvos, valores, usos por turno e vínculo por personagem; edições no catálogo são retroativas aos vínculos.
-- **Equipamentos** — itens, armas corpo a corpo com modos de ataque (perícia, modificador de ataque e ataques desarmados), armas à distância com perícia, materiais de armadura e partes do corpo.
+- **Equipamentos** — itens, armas com modos de ataque corpo a corpo e à distância (perícia, dano estruturado, divisor de armadura, alcance e cadência), materiais de armadura e partes do corpo.
 - **Inventário** — quantidades, itens equipados, munição atual e armaduras por parte do corpo e camada.
 - **Catálogos reutilizáveis** — cadastre um equipamento, perícia ou magia uma vez e reutilize em qualquer personagem.
 - **Exportação em PDF** — gere a ficha completa em PDF com um clique.
 - **Múltiplos bancos de dados** — abra, crie e alterne entre arquivos SQLite; o app valida o esquema e mantém a lista de recentes.
+- **Duplicação de fichas** — copie um personagem com todos os vínculos: perícias, magias, vantagens, desvantagens, efeitos de combate, itens, armas e armaduras.
 - **Proteção contra duplicidade** — validação de registros repetidos nos catálogos.
 - **Integração com Dice-Master** — abre e edita o mesmo banco SQLite do bot de Discord [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master), sendo a principal ferramenta para gerenciar personagens, perícias, magias, equipamentos e inventário usados nas sessões.
 
@@ -45,7 +46,7 @@ O [Dice-Master](https://github.com/M-G-Bitencourt/Dice-Master) é um bot de Disc
 
 Na aba **Banco de Dados**, selecione o arquivo SQLite do Dice-Master para gerenciar personagens, perícias, magias, vantagens, desvantagens, equipamentos e inventário com uma interface visual, sem precisar editar o banco manualmente. O esquema do arquivo é validado antes da abertura, evitando alterações em bancos incompatíveis.
 
-O esquema atual é a **versão 12** (`PRAGMA user_version = 12`). Bancos de versões anteriores não são migrados nem aceitos; crie ou selecione um banco novo. As tabelas de estado em tempo real do Dice-Master (`combat_sessions`, `pending_attacks`, `combat_participants`, `combat_log`) são apenas validadas pelo gerenciador. Já o catálogo `combat_effects` e os vínculos `character_combat_effects` são editáveis na aba **Magias e Traços** e na ficha do personagem.
+O esquema atual é a **versão 13** (`PRAGMA user_version = 13`). Bancos de versões anteriores não são migrados nem aceitos; crie ou selecione um banco novo. As tabelas `weapons` e `weapon_modes` unificam armas e modos de ataque, `character_weapons` guarda os vínculos de inventário e `damage_types` define os tipos de dano. As tabelas de estado em tempo real do Dice-Master (`combat_sessions`, `pending_attacks`, `combat_participants`, `combat_log`) são apenas validadas pelo gerenciador. Já o catálogo `combat_effects` e os vínculos `character_combat_effects` são editáveis na aba **Magias e Traços** e na ficha do personagem.
 
 Efeitos passivos (`st`, `dx`, `iq`, `ht`, `max_pv`, `max_pf`, `will`, `per`, `basic_speed`, `basic_move`, `ht_check` e `rd`) não consomem usos por turno e afetam somente o combate do Dice-Master. A ficha e o admin continuam exibindo os valores base do personagem.
 
@@ -78,17 +79,17 @@ O catálogo centraliza perícias, magias, vantagens, desvantagens, escolas de ma
 
 ### Equipamentos
 
-Armas, itens, materiais de armadura e partes do corpo ficam disponíveis em catálogos próprios, com cadastro e edição por formulário.
+Itens, armas com modos corpo a corpo e à distância, materiais de armadura e partes do corpo ficam disponíveis em catálogos próprios, com cadastro e edição por formulário.
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="git-assets/itens.png" alt="Catálogo de equipamentos com armas corpo a corpo">
-      <p align="center"><sub>Catálogo de equipamentos e armas corpo a corpo</sub></p>
+      <img src="git-assets/itens.png" alt="Catálogo de equipamentos com armas">
+      <p align="center"><sub>Catálogo de equipamentos e armas</sub></p>
     </td>
     <td width="50%" valign="top">
       <img src="git-assets/new_weapon.png" alt="Formulário de cadastro de uma nova arma">
-      <p align="center"><sub>Cadastro de uma nova arma corpo a corpo</sub></p>
+      <p align="center"><sub>Cadastro de uma nova arma</sub></p>
     </td>
   </tr>
 </table>
@@ -167,9 +168,12 @@ Endpoints principais:
 | `GET` / `POST` | `/api/characters` | Lista e cria personagens |
 | `GET` / `PUT` / `DELETE` | `/api/characters/<id>` | Consulta, atualiza e exclui um personagem |
 | `GET` | `/api/characters/<id>/details` | Retorna a ficha agregada com cálculos |
+| `POST` | `/api/characters/<id>/duplicate` | Duplica a ficha e todos os vínculos do personagem |
 | `GET` / `POST` | `/api/characters/<id>/<relação>` | Lista e vincula itens à ficha |
 | `PUT` / `DELETE` | `/api/characters/<id>/<relação>/<id>` | Atualiza e desvincula itens da ficha |
 | `GET` | `/api/characters/<id>/export` | Exporta a ficha completa em PDF |
+| `GET` / `POST` | `/api/weapons/<id>/modes` | Lista e cria modos de ataque de uma arma |
+| `GET` | `/api/damage-types` | Lista os tipos de dano com rótulos em pt-BR |
 | CRUD | `/api/<recurso>` | Catálogos (itens, armas, perícias, magias etc.) |
 | `GET` | `/api/database` | Estado do banco ativo e lista de recentes |
 | `POST` | `/api/database/select` · `/create` · `/reset` · `/browse` | Seleciona, cria, restaura ou localiza bancos de dados |

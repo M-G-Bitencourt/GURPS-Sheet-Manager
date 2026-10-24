@@ -10,6 +10,7 @@ from api.crud_routes import register_crud_routes
 from api.errors import ApiError, NotFoundError
 from api.generic_crud import coerce_value, get_row, translate_integrity_error
 from api.resources import RELATIONS, Relation, get_relation, get_resource
+from api.weapons import fetch_weapon_modes
 from database.connection import get_connection
 
 characters_blueprint = Blueprint("characters", __name__, url_prefix="/api")
@@ -436,105 +437,41 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
         for row in items_rows
     ]
 
-    melee_rows = connection.execute(
+    weapon_rows = connection.execute(
         """
-        SELECT cmw.character_melee_id, cmw.melee_weapon_id, w.name, w.tl,
-               w.min_st, w.is_two_handed, w.weight, w.cost, w.description,
-               w.is_unarmed, w.is_fallback,
-               cmw.custom_name, cmw.quantity, cmw.is_equipped
-        FROM character_melee_weapons cmw
-        JOIN melee_weapons w ON cmw.melee_weapon_id = w.melee_weapon_id
-        WHERE cmw.character_id = ?
-        ORDER BY cmw.is_equipped DESC, w.name COLLATE NOCASE ASC
+        SELECT cw.character_weapon_id, cw.weapon_id, cw.custom_name,
+               cw.quantity, cw.is_equipped, cw.current_shots,
+               w.key, w.name, w.tl, w.min_st, w.is_two_handed, w.weight,
+               w.cost, w.description, w.is_unarmed, w.is_fallback
+        FROM character_weapons cw
+        JOIN weapons w ON cw.weapon_id = w.weapon_id
+        WHERE cw.character_id = ?
+        ORDER BY cw.is_equipped DESC, w.name COLLATE NOCASE ASC,
+                 cw.character_weapon_id ASC
         """,
         (character_id,),
     ).fetchall()
-    melee_weapons = []
-    for row in melee_rows:
-        mode_rows = connection.execute(
-            """
-            SELECT m.mode_id, m.mode_name, m.skill_id, s.name AS skill_name,
-                   m.damage_base, m.damage_modifier, m.attack_modifier,
-                   m.damage_type, m.reach, m.parry, m.notes
-            FROM melee_weapon_modes m
-            LEFT JOIN skills s ON m.skill_id = s.skill_id
-            WHERE m.melee_weapon_id = ?
-            ORDER BY m.mode_id ASC
-            """,
-            (row["melee_weapon_id"],),
-        ).fetchall()
-        melee_weapons.append(
-            {
-                "character_melee_id": row["character_melee_id"],
-                "melee_weapon_id": row["melee_weapon_id"],
-                "name": row["name"],
-                "tl": row["tl"] or 0,
-                "min_st": row["min_st"] or 0,
-                "is_two_handed": row["is_two_handed"] or 0,
-                "weight": row["weight"] or 0.0,
-                "cost": row["cost"] or 0.0,
-                "description": row["description"],
-                "is_unarmed": row["is_unarmed"] or 0,
-                "is_fallback": row["is_fallback"] or 0,
-                "custom_name": row["custom_name"],
-                "quantity": row["quantity"] or 1,
-                "is_equipped": row["is_equipped"] or 0,
-                "modes": [
-                    {
-                        "mode_id": mode["mode_id"],
-                        "mode_name": mode["mode_name"],
-                        "skill_id": mode["skill_id"],
-                        "skill_name": mode["skill_name"],
-                        "damage_base": mode["damage_base"],
-                        "damage_modifier": mode["damage_modifier"] or 0,
-                        "attack_modifier": mode["attack_modifier"] or 0,
-                        "damage_type": mode["damage_type"],
-                        "reach": mode["reach"],
-                        "parry": mode["parry"],
-                        "notes": mode["notes"],
-                    }
-                    for mode in mode_rows
-                ],
-            }
-        )
-
-    ranged_rows = connection.execute(
-        """
-        SELECT crw.character_ranged_id, crw.ranged_weapon_id, w.name, w.skill_id,
-               s.name AS skill_name, w.damage, w.acc, w.range_half, w.range_max,
-               w.rof, w.shots, w.min_st, w.recoil, w.weight, w.cost, w.description,
-               crw.quantity, crw.current_shots, crw.is_equipped
-        FROM character_ranged_weapons crw
-        JOIN ranged_weapons w ON crw.ranged_weapon_id = w.ranged_weapon_id
-        LEFT JOIN skills s ON w.skill_id = s.skill_id
-        WHERE crw.character_id = ?
-        ORDER BY crw.is_equipped DESC, w.name COLLATE NOCASE ASC
-        """,
-        (character_id,),
-    ).fetchall()
-    ranged_weapons = [
+    weapons = [
         {
-            "character_ranged_id": row["character_ranged_id"],
-            "ranged_weapon_id": row["ranged_weapon_id"],
+            "character_weapon_id": row["character_weapon_id"],
+            "weapon_id": row["weapon_id"],
+            "key": row["key"],
             "name": row["name"],
-            "skill_id": row["skill_id"],
-            "skill_name": row["skill_name"],
-            "damage": row["damage"],
-            "acc": row["acc"] or 0,
-            "range_half": row["range_half"],
-            "range_max": row["range_max"],
-            "rof": row["rof"] or 1,
-            "shots": row["shots"],
+            "tl": row["tl"] or 0,
             "min_st": row["min_st"] or 0,
-            "recoil": row["recoil"] or 1,
+            "is_two_handed": row["is_two_handed"] or 0,
             "weight": row["weight"] or 0.0,
             "cost": row["cost"] or 0.0,
             "description": row["description"],
+            "is_unarmed": row["is_unarmed"] or 0,
+            "is_fallback": row["is_fallback"] or 0,
+            "custom_name": row["custom_name"],
             "quantity": row["quantity"] or 1,
-            "current_shots": row["current_shots"] or 0,
             "is_equipped": row["is_equipped"] or 0,
+            "current_shots": row["current_shots"] or 0,
+            "modes": fetch_weapon_modes(connection, row["weapon_id"]),
         }
-        for row in ranged_rows
+        for row in weapon_rows
     ]
 
     armor_rows = connection.execute(
@@ -578,21 +515,18 @@ def _inventory_entries(connection: sqlite3.Connection, character_id: int) -> Dic
 
     total_weight = (
         sum(entry["weight"] * entry["quantity"] for entry in items)
-        + sum(entry["weight"] * entry["quantity"] for entry in melee_weapons)
-        + sum(entry["weight"] * entry["quantity"] for entry in ranged_weapons)
+        + sum(entry["weight"] * entry["quantity"] for entry in weapons)
         + sum(entry["weight"] for entry in armors)
     )
     total_cost = (
         sum(entry["cost"] * entry["quantity"] for entry in items)
-        + sum(entry["cost"] * entry["quantity"] for entry in melee_weapons)
-        + sum(entry["cost"] * entry["quantity"] for entry in ranged_weapons)
+        + sum(entry["cost"] * entry["quantity"] for entry in weapons)
         + sum(entry["cost"] for entry in armors)
     )
 
     return {
         "items": items,
-        "melee_weapons": melee_weapons,
-        "ranged_weapons": ranged_weapons,
+        "weapons": weapons,
         "armors": armors,
         "total_weight": round(total_weight, 3),
         "total_cost": round(total_cost, 2),
@@ -696,9 +630,67 @@ def get_character_details(character_id: int) -> Dict[str, Any]:
     }
 
 
+def duplicate_character(character_id: int) -> Dict[str, Any]:
+    """Creates a full copy of a character and every bound relation."""
+    source = get_row("characters", character_id)
+    resource = get_resource("characters")
+
+    copy_columns = [
+        column.name for column in resource.columns if column.name != resource.pk
+    ]
+    values = {name: source[name] for name in copy_columns}
+    base_name = str(values.get("name") or "").strip() or f"Personagem {character_id}"
+    values["name"] = f"{base_name} (Cópia)"
+
+    connection = get_connection()
+    try:
+        new_id = connection.execute(
+            f'SELECT COALESCE(MAX("{resource.pk}"), 0) + 1 FROM "{resource.table}"'
+        ).fetchone()[0]
+
+        character_columns = [resource.pk, *copy_columns]
+        quoted = ", ".join(f'"{name}"' for name in character_columns)
+        placeholders = ", ".join("?" for _ in character_columns)
+        connection.execute(
+            f'INSERT INTO "{resource.table}" ({quoted}) VALUES ({placeholders})',
+            [new_id, *[values[name] for name in copy_columns]],
+        )
+
+        for relation in RELATIONS.values():
+            relation_columns = ["character_id", relation.item_fk]
+            if relation.secondary_fk:
+                relation_columns.append(relation.secondary_fk)
+            relation_columns.extend(column.name for column in relation.columns)
+            relation_columns = list(dict.fromkeys(relation_columns))
+
+            quoted_columns = ", ".join(f'"{name}"' for name in relation_columns)
+            selected_columns = ", ".join(
+                f'"{name}"' for name in relation_columns if name != "character_id"
+            )
+            connection.execute(
+                f'INSERT INTO "{relation.table}" ({quoted_columns}) '
+                f'SELECT ?, {selected_columns} FROM "{relation.table}" '
+                'WHERE "character_id" = ?',
+                (new_id, character_id),
+            )
+
+        connection.commit()
+    except sqlite3.IntegrityError as error:
+        raise translate_integrity_error(resource, error) from error
+    finally:
+        connection.close()
+
+    return get_row("characters", new_id)
+
+
 @characters_blueprint.get("/characters/<int:character_id>/details")
 def character_details_view(character_id: int):
     return jsonify(get_character_details(character_id))
+
+
+@characters_blueprint.post("/characters/<int:character_id>/duplicate")
+def duplicate_character_view(character_id: int):
+    return jsonify(duplicate_character(character_id)), 201
 
 
 def _register_relation_routes(relation_key: str) -> None:

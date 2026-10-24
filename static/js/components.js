@@ -216,7 +216,10 @@ function buildField(column, value, lookups) {
             options.push(String(value));
         }
         for (const option of options) {
-            const optionNode = el('option', { value: option, text: option });
+            const optionNode = el('option', {
+                value: option,
+                text: column.option_labels?.[option] ?? option,
+            });
             if (hasValue && String(value) === option) {
                 optionNode.selected = true;
             }
@@ -232,7 +235,10 @@ function buildField(column, value, lookups) {
             options.push(value);
         }
         for (const option of options) {
-            datalist.append(el('option', { value: option }));
+            datalist.append(el('option', {
+                value: option,
+                label: column.option_labels?.[option] ?? option,
+            }));
         }
         extra = datalist;
     } else if (column.multiline) {

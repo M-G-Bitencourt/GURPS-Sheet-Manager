@@ -31,8 +31,7 @@ const RELATION_PANELS = [
     { key: 'additional-stats', label: 'Stats Adicionais' },
     { key: 'combat-effects', label: 'Efeitos de Combate' },
     { key: 'items', label: 'Itens' },
-    { key: 'melee-weapons', label: 'Armas Corpo a Corpo' },
-    { key: 'ranged-weapons', label: 'Armas a Distância' },
+    { key: 'weapons', label: 'Armas' },
     { key: 'armors', label: 'Armaduras' },
 ];
 
@@ -95,20 +94,37 @@ function modesBlock(modes) {
         buildTable({
             columns: [
                 { label: 'Modo', render: (mode) => mode.mode_name },
+                { label: 'Tipo', render: (mode) => mode.attack_kind_label ?? '-' },
                 { label: 'Perícia', render: (mode) => mode.skill_name ?? '-' },
+                { label: 'Dano', render: (mode) => mode.damage_display ?? '-' },
                 {
-                    label: 'Dano',
-                    render: (mode) => `${mode.damage_base}${mode.damage_modifier >= 0 ? '+' : ''}${mode.damage_modifier} ${mode.damage_type}`,
+                    label: 'Alcance',
+                    render: (mode) => mode.range_display || mode.reach || '-',
                 },
+                { label: 'Acc', class: 'text-right', render: (mode) => mode.acc ?? '-' },
+                { label: 'RoF', class: 'text-right', render: (mode) => mode.rof ?? '-' },
+                { label: 'Tiros', render: (mode) => mode.shots ?? '-' },
+                { label: 'Rcl', class: 'text-right', render: (mode) => mode.recoil ?? '-' },
+                { label: 'Aparar', render: (mode) => mode.parry ?? '-' },
                 { label: 'Mod. Ataque', class: 'text-right', render: (mode) => mode.attack_modifier ?? 0 },
-                { label: 'Alcance', render: (mode) => mode.reach },
-                { label: 'Aparar', render: (mode) => mode.parry },
-                { label: 'Notas', render: (mode) => mode.notes ?? '-' },
+                { label: 'Notas', render: (mode) => truncatedText(mode.notes) },
             ],
             rows: modes,
             emptyMessage: 'Nenhum modo de ataque cadastrado.',
         }),
     ]);
+}
+
+function attackKindSummary(modes = []) {
+    const labels = [...new Set(
+        modes.map((mode) => mode.attack_kind_label).filter(Boolean),
+    )];
+    return labels.length ? labels.join(' / ') : '-';
+}
+
+function weaponDamageSummary(modes = []) {
+    const labels = modes.map((mode) => mode.damage_display).filter(Boolean);
+    return labels.length ? truncatedText(labels.join(' / ')) : '-';
 }
 
 const RELATION_CONFIG = {
@@ -277,11 +293,13 @@ const RELATION_CONFIG = {
             descriptionBlock(row.description),
         ],
     },
-    'melee-weapons': {
-        data: (details) => details.inventory.melee_weapons,
+    weapons: {
+        data: (details) => details.inventory.weapons,
         columns: [
             { label: 'Arma', render: (row) => itemDisplayName(row) },
-            { label: 'ST Min.', class: 'text-right', render: (row) => row.min_st },
+            { label: 'Tipos', render: (row) => attackKindSummary(row.modes) },
+            { label: 'Dano', render: (row) => weaponDamageSummary(row.modes) },
+            { label: 'Tiros Atuais', class: 'text-right', render: (row) => row.current_shots ?? 0 },
             { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
             { label: 'Quantidade', class: 'text-right', render: (row) => row.quantity },
             { label: 'Equipado', render: equippedBadge },
@@ -291,6 +309,7 @@ const RELATION_CONFIG = {
         detail: (row) => [
             definitionList([
                 ['Arma', row.custom_name ? `${row.custom_name} (${row.name})` : row.name],
+                ['Chave', row.key || '-'],
                 ['NT', row.tl],
                 ['ST Mínimo', row.min_st],
                 ['Empunhadura', row.is_two_handed ? 'Duas Mãos' : 'Uma Mão'],
@@ -299,42 +318,11 @@ const RELATION_CONFIG = {
                 ['Peso (kg)', formatNumber(row.weight, 3)],
                 ['Custo ($)', formatNumber(row.cost)],
                 ['Quantidade', row.quantity],
+                ['Tiros Atuais', row.current_shots],
                 ['Estado', row.is_equipped ? 'EQUIPADO' : 'Guardado'],
             ]),
             descriptionBlock(row.description),
             modesBlock(row.modes || []),
-        ],
-    },
-    'ranged-weapons': {
-        data: (details) => details.inventory.ranged_weapons,
-        columns: [
-            { label: 'Arma', render: (row) => itemDisplayName(row) },
-            { label: 'Dano', render: (row) => row.damage ?? '-' },
-            { label: 'Tiros', render: (row) => `${row.current_shots} / ${row.shots ?? '-'}` },
-            { label: 'Peso (kg)', class: 'text-right', render: (row) => formatNumber(row.weight) },
-            { label: 'Equipado', render: equippedBadge },
-        ],
-        addLabel: 'Adicionar Arma',
-        canToggleEquip: true,
-        detail: (row) => [
-            definitionList([
-                ['Arma', row.name],
-                ['Perícia', row.skill_name || '-'],
-                ['Dano', row.damage],
-                ['Precisão (Acc)', row.acc],
-                ['Alcance 1/2D', row.range_half],
-                ['Alcance Máximo', row.range_max],
-                ['Cadência (RoF)', row.rof],
-                ['Tiros/Carga', row.shots],
-                ['Tiros Atuais', row.current_shots],
-                ['ST Mínimo', row.min_st],
-                ['Recuo (Rcl)', row.recoil],
-                ['Peso (kg)', formatNumber(row.weight, 3)],
-                ['Custo ($)', formatNumber(row.cost)],
-                ['Quantidade', row.quantity],
-                ['Estado', row.is_equipped ? 'EQUIPADO' : 'Guardado'],
-            ]),
-            descriptionBlock(row.description),
         ],
     },
     armors: {
@@ -530,6 +518,13 @@ function renderDetail() {
     const derived = details.derived;
     const summary = state.characters.find((item) => item.character_id === character.character_id) || character;
 
+    const duplicateButton = el('button', {
+        type: 'button',
+        class: 'btn',
+        text: 'Duplicar Personagem',
+        onclick: () => duplicateCharacter(duplicateButton),
+    });
+
     const header = el('div', { class: 'character-detail-header' }, [
         el('div', {}, [
             el('h1', {}, [
@@ -548,6 +543,7 @@ function renderDetail() {
                 text: 'Editar Personagem',
                 onclick: () => openCharacterForm(summary),
             }),
+            duplicateButton,
             el('button', {
                 type: 'button',
                 class: 'btn',
@@ -702,16 +698,36 @@ function renderRelationPanel(relationKey) {
     );
 }
 
+async function loadRelationItemOptions(relation, itemResource) {
+    if (!relation.item_label_columns?.length) {
+        return loadLookup(
+            relation.item_resource,
+            itemResource.pk,
+            relation.item_label,
+        );
+    }
+
+    const rows = await api.get(`/api/${relation.item_resource}`);
+    return rows.map((row) => {
+        const baseLabel = String(
+            row[relation.item_label] ?? `#${row[itemResource.pk]}`,
+        );
+        const extras = relation.item_label_columns
+            .map(([column, label]) => `${label} ${row[column] ?? '-'}`)
+            .join(', ');
+        return {
+            value: row[itemResource.pk],
+            label: extras ? `${baseLabel} (${extras})` : baseLabel,
+        };
+    });
+}
+
 async function openRelationForm(relationKey, row) {
     const relation = state.schemas.relations[relationKey];
     const config = RELATION_CONFIG[relationKey];
 
     const itemResource = state.schemas.resources[relation.item_resource];
-    const itemOptions = await loadLookup(
-        relation.item_resource,
-        itemResource.pk,
-        relation.item_label,
-    );
+    const itemOptions = await loadRelationItemOptions(relation, itemResource);
 
     const lookups = { [relation.item_resource]: itemOptions };
     const columns = [];
@@ -723,7 +739,9 @@ async function openRelationForm(relationKey, row) {
                 ? 'Material'
                 : relationKey === 'combat-effects'
                     ? 'Efeito'
-                    : 'Registro',
+                    : relationKey === 'weapons'
+                        ? 'Arma'
+                        : 'Registro',
             type: 'fk',
             required: true,
             fk_resource: relation.item_resource,
@@ -833,6 +851,24 @@ async function openCharacterForm(character) {
             errorNode.classList.remove('hidden');
         }
     });
+}
+
+async function duplicateCharacter(button) {
+    if (state.selectedId === null) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const copy = await api.post(`/api/characters/${state.selectedId}/duplicate`);
+        state.selectedId = copy.character_id;
+        showToast('Personagem duplicado com sucesso.', 'success');
+        await loadCharacters();
+    } catch (error) {
+        showToast(error.message, 'error');
+    } finally {
+        button.disabled = false;
+    }
 }
 
 async function exportCharacter() {

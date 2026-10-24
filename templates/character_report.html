@@ -313,9 +313,11 @@
         <p class="empty">Nenhum item registrado.</p>
         {% endif %}
 
-        <h3 class="subsection__title">Armas Corpo a Corpo</h3>
-        {% if inventory.melee_weapons %}
-            {% for weapon in inventory.melee_weapons %}
+        <h3 class="subsection__title">Armas</h3>
+        {% if inventory.weapons %}
+            {% for weapon in inventory.weapons %}
+            {% set melee_modes = weapon.modes | selectattr('attack_kind', 'equalto', 'melee') | list %}
+            {% set ranged_modes = weapon.modes | selectattr('attack_kind', 'equalto', 'ranged') | list %}
             <div class="weapon-block">
                 <div class="weapon-block__header">
                     <span class="weapon-block__name">{{ weapon.custom_name or weapon.name }}</span>
@@ -328,88 +330,81 @@
                     {% endif %}
                 </div>
                 <div class="weapon-block__stats">
-                    NT {{ weapon.tl }} &middot; ST {{ weapon.min_st }}{% if weapon.is_two_handed %} &middot; Duas Mãos{% endif %}{% if weapon.is_unarmed %} &middot; Desarmado{% endif %}{% if weapon.is_fallback %} &middot; Fallback{% endif %} &middot; Peso {{ '%.2f'|format(weapon.weight) }} kg &middot; $ {{ '%.2f'|format(weapon.cost) }}
+                    NT {{ weapon.tl }} &middot; ST {{ weapon.min_st }}{% if weapon.is_two_handed %} &middot; Duas Mãos{% endif %}{% if weapon.is_unarmed %} &middot; Desarmado{% endif %}{% if weapon.is_fallback %} &middot; Fallback{% endif %} &middot; Peso {{ '%.2f'|format(weapon.weight) }} kg &middot; $ {{ '%.2f'|format(weapon.cost) }}{% if ranged_modes %} &middot; Tiros atuais {{ weapon.current_shots }}{% endif %}
                 </div>
-                {% if weapon.modes %}
+                {% if melee_modes %}
+                <div class="weapon-block__stats"><strong>Modos corpo a corpo</strong></div>
                 <table class="data-table data-table--compact">
                     <thead>
                         <tr>
                             <th>Modo</th>
                             <th>Perícia</th>
                             <th>Dano</th>
-                            <th>Mod. Ataque</th>
                             <th>Alcance</th>
                             <th>Aparar</th>
+                            <th>Ataque</th>
                             <th>Notas</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for mode in weapon.modes %}
+                        {% for mode in melee_modes %}
                         <tr>
                             <td>{{ mode.mode_name }}</td>
                             <td>{{ mode.skill_name or '-' }}</td>
-                            <td>{{ mode.damage_base }}{{ '+' if mode.damage_modifier >= 0 else '' }}{{ mode.damage_modifier }} {{ mode.damage_type }}</td>
+                            <td>{{ mode.damage_display }}</td>
+                            <td>{{ mode.reach or '-' }}</td>
+                            <td>{{ mode.parry or '-' }}</td>
                             <td>{{ mode.attack_modifier }}</td>
-                            <td>{{ mode.reach }}</td>
-                            <td>{{ mode.parry }}</td>
                             <td>{{ mode.notes or '-' }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                {% else %}
+                {% endif %}
+                {% if ranged_modes %}
+                <div class="weapon-block__stats"><strong>Modos à distância</strong></div>
+                <table class="data-table data-table--compact">
+                    <thead>
+                        <tr>
+                            <th>Modo</th>
+                            <th>Perícia</th>
+                            <th>Dano</th>
+                            <th>Acc</th>
+                            <th>1/2D</th>
+                            <th>Máx</th>
+                            <th>RoF</th>
+                            <th>Tiros</th>
+                            <th>Rcl</th>
+                            <th>Ataque</th>
+                            <th>Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mode in ranged_modes %}
+                        <tr>
+                            <td>{{ mode.mode_name }}</td>
+                            <td>{{ mode.skill_name or '-' }}</td>
+                            <td>{{ mode.damage_display }}</td>
+                            <td>{{ mode.acc if mode.acc is not none else '-' }}</td>
+                            <td>{{ mode.range_half if mode.range_half is not none else '-' }}</td>
+                            <td>{{ mode.range_max if mode.range_max is not none else '-' }}</td>
+                            <td>{{ mode.rof if mode.rof is not none else '-' }}</td>
+                            <td>{{ mode.shots or '-' }}</td>
+                            <td>{{ mode.recoil if mode.recoil is not none else '-' }}</td>
+                            <td>{{ mode.attack_modifier }}</td>
+                            <td>{{ mode.notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+                {% if not weapon.modes %}
                 <p class="empty">Nenhum modo de ataque cadastrado.</p>
                 {% endif %}
             </div>
             {% endfor %}
         {% else %}
-        <p class="empty">Nenhuma arma corpo a corpo registrada.</p>
-        {% endif %}
-
-        <h3 class="subsection__title">Armas à Distância</h3>
-        {% if inventory.ranged_weapons %}
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Arma</th>
-                    <th>Perícia</th>
-                    <th>Dano</th>
-                    <th>Acc</th>
-                    <th>1/2D</th>
-                    <th>Máx</th>
-                    <th>RoF</th>
-                    <th>Tiros</th>
-                    <th>ST</th>
-                    <th>Rcl</th>
-                    <th class="text-right">Peso</th>
-                    <th class="text-right">Custo</th>
-                    <th class="text-right">Qtd</th>
-                    <th>Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for weapon in inventory.ranged_weapons %}
-                <tr>
-                    <td>{{ weapon.name }}</td>
-                    <td>{{ weapon.skill_name or '-' }}</td>
-                    <td>{{ weapon.damage or '-' }}</td>
-                    <td>{{ weapon.acc }}</td>
-                    <td>{{ weapon.range_half or '-' }}</td>
-                    <td>{{ weapon.range_max or '-' }}</td>
-                    <td>{{ weapon.rof }}</td>
-                    <td>{{ weapon.shots or '-' }}</td>
-                    <td>{{ weapon.min_st }}</td>
-                    <td>{{ weapon.recoil }}</td>
-                    <td class="text-right">{{ '%.2f'|format(weapon.weight) }}</td>
-                    <td class="text-right">{{ '%.2f'|format(weapon.cost * weapon.quantity) }}</td>
-                    <td class="text-right">{{ weapon.quantity }}</td>
-                    <td>{{ '[EQUIPADO]' if weapon.is_equipped else '-' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="empty">Nenhuma arma à distância registrada.</p>
+        <p class="empty">Nenhuma arma registrada.</p>
         {% endif %}
 
         <h3 class="subsection__title">Armaduras</h3>

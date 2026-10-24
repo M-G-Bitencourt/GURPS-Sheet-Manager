@@ -1,7 +1,7 @@
 """Declarative registry describing every table exposed by the REST API."""
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from api.errors import ApiError, NotFoundError
 
@@ -20,6 +20,7 @@ class Column:
     fk_label: Optional[str] = None
     read_only: bool = False
     multiline: bool = False
+    option_labels: Tuple[Tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,12 +56,36 @@ class Relation:
     secondary_fk: Optional[str] = None
     secondary_resource: Optional[str] = None
     secondary_label: Optional[str] = None
+    item_label_columns: Tuple[Tuple[str, str], ...] = ()
 
 
 ATTRIBUTE_OPTIONS = ("ST", "DX", "IQ", "HT", "Per", "Vont")
 SPELL_RESOURCE_OPTIONS = ("PV", "PF", "ER")
-DAMAGE_BASE_OPTIONS = ("GeB", "GdP", "espec.")
-DAMAGE_TYPE_OPTIONS = ("corte", "contusão", "perfuração", "espec.")
+ATTACK_KIND_OPTIONS = ("melee", "ranged")
+ATTACK_KIND_LABELS = {
+    "melee": "Corpo a corpo",
+    "ranged": "À distância",
+}
+DAMAGE_BASE_OPTIONS = ("swing", "thrust")
+DAMAGE_BASE_LABELS = {
+    "swing": "GeB",
+    "thrust": "GdP",
+}
+DAMAGE_TYPE_LABELS = {
+    "affliction": "Aflição",
+    "burning": "Queimadura",
+    "corrosion": "Corrosão",
+    "crushing": "Contusão",
+    "cutting": "Corte",
+    "fatigue": "Fadiga",
+    "impaling": "Perfuração",
+    "piercing_small": "Perfurante pequena",
+    "piercing": "Perfurante",
+    "piercing_large": "Perfurante grande",
+    "piercing_huge": "Perfurante enorme",
+    "special": "Especial",
+    "toxic": "Tóxico",
+}
 
 COMBAT_EFFECT_APPLIES_TO = (
     "attack",
@@ -132,6 +157,72 @@ COMBAT_EFFECT_TARGET_LABELS = {
     "dodge": "Esquiva",
     "parry": "Aparar",
 }
+
+
+def weapon_mode_display(mode: Mapping[str, Any]) -> Dict[str, Any]:
+    """Adds pt-BR display labels to a raw weapon mode row."""
+    payload = {key: mode[key] for key in mode.keys()}
+    damage_type_key = payload.get("damage_type_key")
+    payload["damage_type"] = DAMAGE_TYPE_LABELS.get(
+        damage_type_key, damage_type_key or ""
+    )
+    payload["damage_base_label"] = DAMAGE_BASE_LABELS.get(payload.get("damage_base"))
+    payload["attack_kind_label"] = ATTACK_KIND_LABELS.get(
+        payload.get("attack_kind"), payload.get("attack_kind")
+    )
+
+    base = payload["damage_base_label"]
+    if not base and payload.get("damage_dice") is not None:
+        base = f'{int(payload["damage_dice"])}d'
+
+    modifier = int(payload.get("damage_modifier") or 0)
+    modifier_text = f"{modifier:+d}" if modifier else ""
+    type_label = payload["damage_type"]
+    divisor = float(payload.get("armor_divisor") or 1.0)
+    divisor_text = "" if divisor == 1 else f" ({divisor:g})"
+    damage_text = f"{base or ''}{modifier_text}".strip()
+    if type_label:
+        damage_text = f"{damage_text} {type_label}".strip()
+    payload["damage_display"] = f"{damage_text}{divisor_text}".strip() or "-"
+
+    if payload.get("attack_kind") == "ranged":
+        range_half = payload.get("range_half")
+        range_max = payload.get("range_max")
+        payload["range_display"] = (
+            f"{range_half if range_half is not None else '-'}/"
+            f"{range_max if range_max is not None else '-'}"
+            if range_half is not None or range_max is not None
+            else None
+        )
+    else:
+        payload["range_display"] = None
+
+    return payload
+
+
+def validate_weapon_mode(values: Dict[str, Any]) -> Dict[str, Any]:
+    """Validates mutually exclusive damage sources and bounded values."""
+    damage_base = values.get("damage_base")
+    damage_dice = values.get("damage_dice")
+
+    if damage_base not in (None, *DAMAGE_BASE_OPTIONS):
+        raise ApiError("O campo 'Base de Dano' contém um valor inválido.")
+    if damage_dice is not None and damage_dice <= 0:
+        raise ApiError("O campo 'Dados de Dano' deve ser maior que zero.")
+    if damage_base and damage_dice is not None:
+        raise ApiError(
+            "Preencha 'Base de Dano' ou 'Dados de Dano', não ambos."
+        )
+
+    attack_kind = values.get("attack_kind")
+    if attack_kind not in ATTACK_KIND_OPTIONS:
+        raise ApiError("O campo 'Tipo de Ataque' contém um valor inválido.")
+
+    armor_divisor = values.get("armor_divisor")
+    if armor_divisor is not None and armor_divisor <= 0:
+        raise ApiError("O campo 'Divisor de Armadura' deve ser maior que zero.")
+
+    return {}
 
 
 def validate_combat_effect(values: Dict[str, Any]) -> Dict[str, Any]:
@@ -230,12 +321,23 @@ RESOURCES = {
         order_by="name COLLATE NOCASE ASC",
         unique_columns=("name",),
     ),
-    "melee-weapons": Resource(
-        key="melee-weapons",
-        table="melee_weapons",
-        pk="melee_weapon_id",
-        label="Armas Corpo a Corpo",
+    "damage-types": Resource(
+        key="damage-types",
+        table="damage_types",
+        pk="damage_type_id",
+        label="Tipos de Dano",
+        columns=(Column("key", "Chave", "text", required=True),),
+        search_columns=("key",),
+        order_by="damage_type_id ASC",
+        unique_columns=("key",),
+    ),
+    "weapons": Resource(
+        key="weapons",
+        table="weapons",
+        pk="weapon_id",
+        label="Armas",
         columns=(
+            Column("key", "Chave", "text"),
             Column("name", "Nome", "text", required=True),
             Column("tl", "NT", "int", default=0),
             Column("min_st", "ST Mínimo", "int", default=0),
@@ -246,84 +348,73 @@ RESOURCES = {
             Column("is_unarmed", "Desarmado", "bool", default=0),
             Column("is_fallback", "Fallback", "bool", default=0),
         ),
-        search_columns=("name",),
+        search_columns=("name", "key"),
         order_by="name COLLATE NOCASE ASC",
         delete_blocked_hint="Existem personagens vinculados a esta arma.",
         unique_columns=("name",),
     ),
-    "melee-weapon-modes": Resource(
-        key="melee-weapon-modes",
-        table="melee_weapon_modes",
+    "weapon-modes": Resource(
+        key="weapon-modes",
+        table="weapon_modes",
         pk="mode_id",
         label="Modos de Ataque",
         columns=(
             Column(
-                "melee_weapon_id",
+                "weapon_id",
                 "Arma",
                 "fk",
                 required=True,
-                fk_resource="melee-weapons",
+                fk_resource="weapons",
                 fk_label="name",
             ),
-            Column("mode_name", "Modo", "text", default="Padrão"),
+            Column("mode_name", "Modo", "text", required=True),
             Column(
                 "skill_id",
                 "Perícia",
                 "fk",
                 fk_resource="skills",
                 fk_label="name",
+            ),
+            Column(
+                "attack_kind",
+                "Tipo de Ataque",
+                "select",
+                default="melee",
+                options=ATTACK_KIND_OPTIONS,
+                option_labels=tuple(ATTACK_KIND_LABELS.items()),
             ),
             Column(
                 "damage_base",
                 "Base de Dano",
-                "enum",
-                required=True,
+                "select",
                 options=DAMAGE_BASE_OPTIONS,
+                option_labels=tuple(DAMAGE_BASE_LABELS.items()),
             ),
+            Column("damage_dice", "Dados de Dano", "int"),
             Column("damage_modifier", "Modificador de Dano", "int", default=0),
-            Column("attack_modifier", "Modificador de Ataque", "int", default=0),
             Column(
-                "damage_type",
+                "damage_type_id",
                 "Tipo de Dano",
-                "enum",
-                required=True,
-                options=DAMAGE_TYPE_OPTIONS,
-            ),
-            Column("reach", "Alcance", "text", required=True),
-            Column("parry", "Aparar", "text", required=True),
-            Column("notes", "Notas", "text", multiline=True),
-        ),
-        order_by="mode_id ASC",
-    ),
-    "ranged-weapons": Resource(
-        key="ranged-weapons",
-        table="ranged_weapons",
-        pk="ranged_weapon_id",
-        label="Armas à Distância",
-        columns=(
-            Column("name", "Nome", "text", required=True),
-            Column(
-                "skill_id",
-                "Perícia",
                 "fk",
-                fk_resource="skills",
-                fk_label="name",
+                required=True,
+                fk_resource="damage-types",
+                fk_label="label",
             ),
-            Column("damage", "Dano", "text"),
-            Column("acc", "Precisão (Acc)", "int", default=0),
+            Column("armor_divisor", "Divisor de Armadura", "float", default=1.0),
+            Column("reach", "Alcance", "text"),
+            Column("parry", "Aparar", "text"),
+            Column("acc", "Precisão (Acc)", "int"),
             Column("range_half", "Alcance 1/2D", "int"),
             Column("range_max", "Alcance Máximo", "int"),
-            Column("rof", "Cadência (RoF)", "int", default=1),
+            Column("rof", "Cadência (RoF)", "int"),
             Column("shots", "Tiros/Carga", "text"),
-            Column("min_st", "ST Mínimo", "int", default=0),
-            Column("recoil", "Recuo (Rcl)", "int", default=1),
-            Column("weight", "Peso (kg)", "float", default=0.0),
-            Column("cost", "Custo ($)", "float", default=0.0),
-            Column("description", "Descrição", "text", multiline=True),
+            Column("recoil", "Recuo (Rcl)", "int"),
+            Column("attack_modifier", "Modificador de Ataque", "int", default=0),
+            Column("notes", "Notas", "text", multiline=True),
         ),
-        search_columns=("name",),
-        order_by="name COLLATE NOCASE ASC",
-        unique_columns=("name",),
+        search_columns=("mode_name",),
+        order_by="mode_id ASC",
+        validator=validate_weapon_mode,
     ),
     "armor-materials": Resource(
         key="armor-materials",
@@ -379,7 +470,7 @@ RESOURCES = {
         ),
         search_columns=("name",),
         order_by="name COLLATE NOCASE ASC",
-        delete_blocked_hint="Existem armas ou modos de ataque usando esta perícia.",
+        delete_blocked_hint="Existem modos de ataque usando esta perícia.",
         unique_columns=("name",),
     ),
     "spells": Resource(
@@ -578,31 +669,20 @@ RELATIONS = {
             Column("is_equipped", "Equipado", "bool", default=0),
         ),
     ),
-    "melee-weapons": Relation(
-        key="melee-weapons",
-        table="character_melee_weapons",
-        pk="character_melee_id",
-        label="Armas Corpo a Corpo",
-        item_fk="melee_weapon_id",
-        item_resource="melee-weapons",
+    "weapons": Relation(
+        key="weapons",
+        table="character_weapons",
+        pk="character_weapon_id",
+        label="Armas",
+        item_fk="weapon_id",
+        item_resource="weapons",
         columns=(
             Column("custom_name", "Nome Personalizado", "text"),
             Column("quantity", "Quantidade", "int", default=1),
             Column("is_equipped", "Equipado", "bool", default=0),
-        ),
-    ),
-    "ranged-weapons": Relation(
-        key="ranged-weapons",
-        table="character_ranged_weapons",
-        pk="character_ranged_id",
-        label="Armas à Distância",
-        item_fk="ranged_weapon_id",
-        item_resource="ranged-weapons",
-        columns=(
-            Column("quantity", "Quantidade", "int", default=1),
             Column("current_shots", "Tiros Atuais", "int", default=0),
-            Column("is_equipped", "Equipado", "bool", default=0),
         ),
+        item_label_columns=(("tl", "NT"),),
     ),
     "armors": Relation(
         key="armors",
@@ -617,6 +697,7 @@ RELATIONS = {
             Column("is_equipped", "Equipado", "bool", default=0),
             Column("layer_order", "Camada", "int", default=0),
         ),
+        item_label_columns=(("tl", "NT"), ("dr", "RD")),
         secondary_fk="body_part_id",
         secondary_resource="body-parts",
         secondary_label="Parte do Corpo",

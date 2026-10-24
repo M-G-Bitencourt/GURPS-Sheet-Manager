@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from api.resources import RELATIONS
 from app import create_app
 from database.connection import (
     get_database_path,
@@ -35,25 +36,60 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         schemas = response.get_json()
 
+        weapon_columns = {
+            column["name"]
+            for column in schemas["resources"]["weapons"]["columns"]
+        }
+        self.assertIn("key", weapon_columns)
+        self.assertIn("is_unarmed", weapon_columns)
+
         mode_columns = {
             column["name"]
-            for column in schemas["resources"]["melee-weapon-modes"]["columns"]
+            for column in schemas["resources"]["weapon-modes"]["columns"]
         }
+        self.assertIn("weapon_id", mode_columns)
         self.assertIn("skill_id", mode_columns)
-        self.assertIn("attack_modifier", mode_columns)
+        self.assertIn("attack_kind", mode_columns)
+        self.assertIn("damage_dice", mode_columns)
+        self.assertIn("damage_type_id", mode_columns)
+        self.assertIn("armor_divisor", mode_columns)
+        self.assertNotIn("damage_type", mode_columns)
         self.assertNotIn("skill_name", mode_columns)
+        self.assertIn("damage-types", schemas["resources"])
 
-        ranged_columns = {
+        attack_kind = next(
+            column
+            for column in schemas["resources"]["weapon-modes"]["columns"]
+            if column["name"] == "attack_kind"
+        )
+        self.assertEqual(attack_kind["option_labels"]["melee"], "Corpo a corpo")
+
+        damage_base = next(
+            column
+            for column in schemas["resources"]["weapon-modes"]["columns"]
+            if column["name"] == "damage_base"
+        )
+        self.assertEqual(damage_base["option_labels"]["swing"], "GeB")
+
+        weapon_relation_columns = {
             column["name"]
-            for column in schemas["resources"]["ranged-weapons"]["columns"]
+            for column in schemas["relations"]["weapons"]["columns"]
         }
-        self.assertIn("skill_id", ranged_columns)
+        self.assertIn("current_shots", weapon_relation_columns)
+        self.assertEqual(
+            schemas["relations"]["weapons"]["item_label_columns"],
+            [["tl", "NT"]],
+        )
 
         armor_columns = {
             column["name"]
             for column in schemas["relations"]["armors"]["columns"]
         }
         self.assertIn("layer_order", armor_columns)
+        self.assertEqual(
+            schemas["relations"]["armors"]["item_label_columns"],
+            [["tl", "NT"], ["dr", "RD"]],
+        )
 
     def test_character_additional_basic_speed_accepts_float(self):
         schemas = self.client.get("/api/schemas").get_json()
@@ -96,7 +132,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(details["derived"]["basic_speed"], 5.25)
         self.assertEqual(details["points"]["secondary"]["speed"], 5)
 
-    def test_melee_modes_resolve_skill_name(self):
+    def test_weapon_modes_resolve_skill_and_damage_type(self):
         skill = self.create(
             "/api/skills",
             {
@@ -105,30 +141,106 @@ class ApiTestCase(unittest.TestCase):
                 "difficulty_id": 1,
             },
         )
-        weapon = self.create("/api/melee-weapons", {"name": "Arma de Teste"})
+        weapon = self.create(
+            "/api/weapons",
+            {"name": "Arma de Teste", "key": "test_weapon"},
+        )
         mode = self.create(
-            f"/api/melee-weapons/{weapon['melee_weapon_id']}/modes",
+            f"/api/weapons/{weapon['weapon_id']}/modes",
             {
                 "mode_name": "Golpe",
                 "skill_id": skill["skill_id"],
-                "damage_base": "GdP",
+                "attack_kind": "melee",
+                "damage_base": "thrust",
                 "damage_modifier": 1,
                 "attack_modifier": -2,
-                "damage_type": "contusão",
+                "damage_type_id": 4,
+                "armor_divisor": 2.0,
                 "reach": "1",
                 "parry": "0",
             },
         )
         self.assertEqual(mode["skill_id"], skill["skill_id"])
         self.assertEqual(mode["attack_modifier"], -2)
+        self.assertEqual(mode["damage_type_id"], 4)
+        self.assertEqual(mode["armor_divisor"], 2.0)
 
         response = self.client.get(
-            f"/api/melee-weapons/{weapon['melee_weapon_id']}/modes"
+            f"/api/weapons/{weapon['weapon_id']}/modes"
         )
         self.assertEqual(response.status_code, 200)
         modes = response.get_json()
         self.assertEqual(modes[0]["skill_name"], "Perícia de Teste")
+        self.assertEqual(modes[0]["damage_type_key"], "crushing")
+        self.assertEqual(modes[0]["damage_type"], "Contusão")
+        self.assertEqual(modes[0]["damage_base_label"], "GdP")
+        self.assertEqual(modes[0]["attack_kind_label"], "Corpo a corpo")
+        self.assertEqual(modes[0]["damage_display"], "GdP+1 Contusão (2)")
         self.assertEqual(modes[0]["attack_modifier"], -2)
+
+        response = self.client.put(
+            f"/api/weapon-modes/{mode['mode_id']}",
+            json={
+                "damage_base": None,
+                "damage_dice": 2,
+                "damage_type_id": 5,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        updated = response.get_json()
+        self.assertIsNone(updated["damage_base"])
+        self.assertEqual(updated["damage_dice"], 2)
+
+        response = self.client.post(
+            f"/api/weapons/{weapon['weapon_id']}/modes",
+            json={
+                "mode_name": "Inválido",
+                "attack_kind": "melee",
+                "damage_base": "swing",
+                "damage_dice": 2,
+                "damage_type_id": 5,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_damage_types_lookup_exposes_labels(self):
+        response = self.client.get("/api/damage-types")
+        self.assertEqual(response.status_code, 200)
+        damage_types = response.get_json()
+        self.assertEqual(len(damage_types), 13)
+        crushing = next(
+            item for item in damage_types if item["key"] == "crushing"
+        )
+        self.assertEqual(crushing["label"], "Contusão")
+
+    def test_character_export_renders_unified_weapons(self):
+        character = self.create("/api/characters", {"name": "Personagem PDF"})
+        weapon = self.create(
+            "/api/weapons",
+            {"name": "Arma PDF", "key": "pdf_weapon"},
+        )
+        self.create(
+            f"/api/weapons/{weapon['weapon_id']}/modes",
+            {
+                "mode_name": "Golpe PDF",
+                "attack_kind": "melee",
+                "damage_base": "swing",
+                "damage_type_id": 5,
+                "reach": "1",
+                "parry": "0",
+            },
+        )
+        self.create(
+            f"/api/characters/{character['character_id']}/weapons",
+            {"weapon_id": weapon["weapon_id"], "current_shots": 0},
+        )
+
+        response = self.client.get(
+            f"/api/characters/{character['character_id']}/export"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/pdf")
+        self.assertTrue(response.data.startswith(b"%PDF"))
 
     def test_schema_exposes_combat_effects(self):
         response = self.client.get("/api/schemas")
@@ -427,32 +539,49 @@ class ApiTestCase(unittest.TestCase):
         character = self.create("/api/characters", {"name": "Personagem de Teste"})
         character_id = character["character_id"]
 
-        melee = self.create("/api/melee-weapons", {"name": "Arma Detalhada"})
+        weapon = self.create(
+            "/api/weapons",
+            {"name": "Arma Detalhada", "key": "detailed_weapon"},
+        )
         self.create(
-            f"/api/melee-weapons/{melee['melee_weapon_id']}/modes",
+            f"/api/weapons/{weapon['weapon_id']}/modes",
             {
                 "mode_name": "Golpe",
                 "skill_id": skill["skill_id"],
-                "damage_base": "GdP",
+                "attack_kind": "melee",
+                "damage_base": "thrust",
                 "damage_modifier": 0,
                 "attack_modifier": 0,
-                "damage_type": "corte",
+                "damage_type_id": 5,
                 "reach": "1",
                 "parry": "0",
             },
         )
         self.create(
-            f"/api/characters/{character_id}/melee-weapons",
-            {"melee_weapon_id": melee["melee_weapon_id"]},
-        )
-
-        ranged = self.create(
-            "/api/ranged-weapons",
-            {"name": "Arma à Distância de Teste", "skill_id": skill["skill_id"]},
+            f"/api/weapons/{weapon['weapon_id']}/modes",
+            {
+                "mode_name": "Tiro",
+                "skill_id": skill["skill_id"],
+                "attack_kind": "ranged",
+                "damage_dice": 2,
+                "damage_modifier": 1,
+                "attack_modifier": 0,
+                "damage_type_id": 4,
+                "acc": 3,
+                "range_half": 10,
+                "range_max": 15,
+                "rof": 1,
+                "shots": "1",
+                "recoil": 1,
+            },
         )
         self.create(
-            f"/api/characters/{character_id}/ranged-weapons",
-            {"ranged_weapon_id": ranged["ranged_weapon_id"]},
+            f"/api/characters/{character_id}/weapons",
+            {
+                "weapon_id": weapon["weapon_id"],
+                "custom_name": "Arma de Teste",
+                "current_shots": 4,
+            },
         )
 
         material = self.create(
@@ -481,15 +610,289 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         details = response.get_json()
 
-        self.assertEqual(
-            details["inventory"]["melee_weapons"][0]["modes"][0]["skill_name"],
-            "Tiro de Teste",
-        )
-        self.assertEqual(
-            details["inventory"]["ranged_weapons"][0]["skill_name"],
-            "Tiro de Teste",
-        )
+        detailed_weapon = details["inventory"]["weapons"][0]
+        self.assertEqual(detailed_weapon["current_shots"], 4)
+        self.assertEqual(detailed_weapon["key"], "detailed_weapon")
+        melee_mode = detailed_weapon["modes"][0]
+        ranged_mode = detailed_weapon["modes"][1]
+        self.assertEqual(melee_mode["skill_name"], "Tiro de Teste")
+        self.assertEqual(melee_mode["damage_type"], "Corte")
+        self.assertEqual(melee_mode["attack_kind_label"], "Corpo a corpo")
+        self.assertEqual(ranged_mode["damage_type"], "Contusão")
+        self.assertEqual(ranged_mode["attack_kind_label"], "À distância")
+        self.assertEqual(ranged_mode["damage_display"], "2d+1 Contusão")
+        self.assertEqual(ranged_mode["range_display"], "10/15")
         self.assertEqual(details["inventory"]["armors"][0]["layer_order"], 2)
+
+    def test_duplicate_character_copies_all_relations(self):
+        skill = self.create(
+            "/api/skills",
+            {
+                "name": "Perícia Duplicada",
+                "attribute": "DX",
+                "difficulty_id": 1,
+                "description": "Descrição da perícia",
+            },
+        )
+        spell_class = self.create(
+            "/api/spell-classes", {"class": "Escola Duplicada"}
+        )
+        spell = self.create(
+            "/api/spells",
+            {
+                "name": "Magia Duplicada",
+                "attribute": "IQ",
+                "class": spell_class["spell_class_id"],
+                "difficulty_id": 1,
+                "cost": 2,
+                "resource": "PF",
+                "description": "Descrição da magia",
+            },
+        )
+        advantage = self.create(
+            "/api/advantages",
+            {
+                "name": "Vantagem Duplicada",
+                "cost": 5,
+                "description": "Descrição da vantagem",
+            },
+        )
+        disadvantage = self.create(
+            "/api/disadvantages",
+            {
+                "name": "Desvantagem Duplicada",
+                "cost": -5,
+                "description": "Descrição da desvantagem",
+            },
+        )
+        additional_stat = self.create(
+            "/api/additional-stats", {"stat": "Stat Duplicado"}
+        )
+        effect = self.create(
+            "/api/combat-effects",
+            {
+                "name": "Efeito Duplicado",
+                "applies_to": "damage",
+                "value": 2,
+                "uses_per_turn": 1,
+                "notes": "Nota do efeito",
+            },
+        )
+        item = self.create(
+            "/api/items",
+            {"name": "Item Duplicado", "weight": 0.5, "cost": 10.0},
+        )
+        weapon = self.create(
+            "/api/weapons",
+            {
+                "name": "Arma Duplicada",
+                "key": "duplicated_weapon",
+                "tl": 2,
+                "min_st": 9,
+                "weight": 1.5,
+                "cost": 200.0,
+            },
+        )
+        self.create(
+            f"/api/weapons/{weapon['weapon_id']}/modes",
+            {
+                "mode_name": "Golpe Duplicado",
+                "skill_id": skill["skill_id"],
+                "attack_kind": "melee",
+                "damage_base": "thrust",
+                "damage_modifier": 1,
+                "attack_modifier": 0,
+                "damage_type_id": 5,
+                "reach": "1",
+                "parry": "0",
+            },
+        )
+        self.create(
+            f"/api/weapons/{weapon['weapon_id']}/modes",
+            {
+                "mode_name": "Tiro Duplicado",
+                "skill_id": skill["skill_id"],
+                "attack_kind": "ranged",
+                "damage_dice": 1,
+                "damage_modifier": 0,
+                "attack_modifier": 0,
+                "damage_type_id": 4,
+                "acc": 2,
+                "range_half": 10,
+                "range_max": 15,
+                "rof": 1,
+                "shots": "1",
+                "recoil": 1,
+            },
+        )
+        material = self.create(
+            "/api/armor-materials",
+            {
+                "name": "Material Duplicado",
+                "dr": 2,
+                "is_flexible": 1,
+                "cost_torso": 100.0,
+                "weight_torso": 2.0,
+                "don_time": 5,
+                "notes": "Nota do material",
+            },
+        )
+        body_part = self.create(
+            "/api/body-parts",
+            {
+                "name": "Parte Duplicada",
+                "cost_weight_factor": 1.0,
+                "hit_location_roll": "9-11",
+                "notes": "Nota da parte",
+            },
+        )
+
+        original = self.create(
+            "/api/characters",
+            {
+                "name": "Personagem Duplicado",
+                "owner_id": 123,
+                "is_npc": 1,
+                "st": 11,
+                "dx": 12,
+                "iq": 13,
+                "ht": 14,
+                "additional_max_pv": 2,
+                "additional_vont": 1,
+                "additional_per": 1,
+                "additional_max_pf": 3,
+                "additional_basic_speed": 0.5,
+                "additional_basic_move": 1,
+                "energy_reserve": 5,
+                "normal_diffuse_homogeneous_unded": 2,
+                "money": 100,
+                "current_pv": 7,
+                "current_pf": 8,
+                "current_er": 4,
+                "current_points": 42,
+            },
+        )
+        character_id = original["character_id"]
+
+        self.create(
+            f"/api/characters/{character_id}/skills",
+            {"skill_id": skill["skill_id"], "relative_level": 2},
+        )
+        self.create(
+            f"/api/characters/{character_id}/spells",
+            {"spell_id": spell["spell_id"], "relative_level": 1},
+        )
+        self.create(
+            f"/api/characters/{character_id}/advantages",
+            {"advantage_id": advantage["advantage_id"], "notes": "Nota"},
+        )
+        self.create(
+            f"/api/characters/{character_id}/disadvantages",
+            {"disadvantage_id": disadvantage["disadvantage_id"], "notes": "Nota"},
+        )
+        self.create(
+            f"/api/characters/{character_id}/additional-stats",
+            {
+                "additional_stat_id": additional_stat["id_additional_stat"],
+                "value": 3,
+            },
+        )
+        self.create(
+            f"/api/characters/{character_id}/combat-effects",
+            {"effect_id": effect["effect_id"]},
+        )
+        self.create(
+            f"/api/characters/{character_id}/items",
+            {"item_id": item["item_id"], "quantity": 3, "is_equipped": 1},
+        )
+        self.create(
+            f"/api/characters/{character_id}/weapons",
+            {
+                "weapon_id": weapon["weapon_id"],
+                "custom_name": "Arma Afiada",
+                "quantity": 2,
+                "is_equipped": 1,
+                "current_shots": 4,
+            },
+        )
+        self.create(
+            f"/api/characters/{character_id}/armors",
+            {
+                "material_id": material["material_id"],
+                "body_part_id": body_part["body_part_id"],
+                "custom_name": "Peitoral Duplicado",
+                "quantity": 2,
+                "is_equipped": 1,
+                "layer_order": 2,
+            },
+        )
+
+        response = self.client.post(
+            f"/api/characters/{character_id}/duplicate"
+        )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        copy = response.get_json()
+
+        self.assertNotEqual(copy["character_id"], character_id)
+        self.assertEqual(copy["name"], "Personagem Duplicado (Cópia)")
+        for field, value in original.items():
+            if field in {"character_id", "name"}:
+                continue
+            self.assertEqual(copy[field], value, field)
+
+        def without_relation_ids(rows):
+            return [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if not key.startswith("character_")
+                }
+                for row in rows
+            ]
+
+        for relation_key in RELATIONS:
+            original_rows = self.client.get(
+                f"/api/characters/{character_id}/{relation_key}"
+            ).get_json()
+            copy_rows = self.client.get(
+                f"/api/characters/{copy['character_id']}/{relation_key}"
+            ).get_json()
+            self.assertTrue(original_rows, relation_key)
+            self.assertEqual(
+                without_relation_ids(copy_rows),
+                without_relation_ids(original_rows),
+                relation_key,
+            )
+
+        original_details = self.client.get(
+            f"/api/characters/{character_id}/details"
+        ).get_json()
+        copy_details = self.client.get(
+            f"/api/characters/{copy['character_id']}/details"
+        ).get_json()
+        self.assertEqual(copy_details["derived"], original_details["derived"])
+        self.assertEqual(copy_details["points"], original_details["points"])
+        self.assertEqual(
+            copy_details["inventory"]["total_weight"],
+            original_details["inventory"]["total_weight"],
+        )
+        self.assertEqual(
+            copy_details["inventory"]["total_cost"],
+            original_details["inventory"]["total_cost"],
+        )
+        self.assertEqual(
+            copy_details["inventory"]["weapons"][0]["modes"],
+            original_details["inventory"]["weapons"][0]["modes"],
+        )
+        self.assertEqual(
+            self.client.get(f"/api/characters/{character_id}").get_json(),
+            original,
+        )
+
+        response = self.client.post(
+            f"/api/characters/{character_id + 1000000}/duplicate"
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

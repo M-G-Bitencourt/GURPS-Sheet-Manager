@@ -65,141 +65,164 @@ CREATE TABLE "items" (
     "cost" REAL DEFAULT 0.0,
     "description" TEXT
 );
-CREATE TABLE "melee_weapons" (
-    "melee_weapon_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE "damage_types" (
+    "damage_type_id" INTEGER PRIMARY KEY,
+    "key" TEXT NOT NULL UNIQUE
+);
+INSERT INTO "damage_types" ("damage_type_id", "key") VALUES
+    (1, 'affliction'),
+    (2, 'burning'),
+    (3, 'corrosion'),
+    (4, 'crushing'),
+    (5, 'cutting'),
+    (6, 'fatigue'),
+    (7, 'impaling'),
+    (8, 'piercing_small'),
+    (9, 'piercing'),
+    (10, 'piercing_large'),
+    (11, 'piercing_huge'),
+    (12, 'special'),
+    (13, 'toxic');
+CREATE TABLE "weapons" (
+    "weapon_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "key" TEXT UNIQUE,
     "name" TEXT NOT NULL,
-    "tl" INTEGER DEFAULT 0,              -- Nível Tecnológico (NT)
-    "min_st" INTEGER DEFAULT 0,          -- ST Mínimo necessário
-    "is_two_handed" INTEGER DEFAULT 0,   -- 1 se requer 2 mãos (marcação † ou ‡ no ST)
-    "weight" REAL DEFAULT 0.0,           -- Peso (kg)
-    "cost" REAL DEFAULT 0.0,             -- Custo ($)
-    "description" TEXT,                  -- Notas gerais
-    "is_unarmed" INTEGER NOT NULL DEFAULT 0,
+    "tl" INTEGER NOT NULL DEFAULT 0 CHECK ("tl" >= 0),
+    "min_st" INTEGER NOT NULL DEFAULT 0 CHECK ("min_st" >= 0),
+    "is_two_handed" INTEGER NOT NULL DEFAULT 0
+        CHECK ("is_two_handed" IN (0, 1)),
+    "weight" REAL NOT NULL DEFAULT 0.0 CHECK ("weight" >= 0),
+    "cost" REAL NOT NULL DEFAULT 0.0 CHECK ("cost" >= 0),
+    "description" TEXT,
+    "is_unarmed" INTEGER NOT NULL DEFAULT 0
+        CHECK ("is_unarmed" IN (0, 1)),
     "is_fallback" INTEGER NOT NULL DEFAULT 0
+        CHECK ("is_fallback" IN (0, 1))
 );
-CREATE TABLE "melee_weapon_modes" (
+CREATE TABLE "weapon_modes" (
     "mode_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "melee_weapon_id" INTEGER NOT NULL,
-    "mode_name" TEXT DEFAULT 'Padrão',   -- Ex: 'Corte', 'Estocada', 'Gancho'
-    "skill_id" INTEGER,                  -- Perícia do modo; NULL no fallback desarmado
-    "damage_base" TEXT NOT NULL,         -- 'GeB' (Swing) ou 'GdP' (Thrust)
-    "damage_modifier" INTEGER DEFAULT 0, -- Modificador numérico (ex: +2, -1, 0)
-    "damage_type" TEXT NOT NULL,         -- 'corte', 'perfuração', 'contusão'
-    "reach" TEXT NOT NULL,               -- 'C', '1', '1,2'
-    "parry" TEXT NOT NULL,               -- '0', '0U' (desequilibrada), 'Não'
-    "notes" TEXT,                        -- Ex: 'Gancho', 'Presa'
+    "weapon_id" INTEGER NOT NULL,
+    "mode_name" TEXT NOT NULL,
+    "skill_id" INTEGER,
+    "attack_kind" TEXT NOT NULL DEFAULT 'melee'
+        CHECK ("attack_kind" IN ('melee', 'ranged')),
+    "damage_base" TEXT
+        CHECK ("damage_base" IN ('swing', 'thrust')),
+    "damage_dice" INTEGER
+        CHECK ("damage_dice" IS NULL OR "damage_dice" > 0),
+    "damage_modifier" INTEGER NOT NULL DEFAULT 0,
+    "damage_type_id" INTEGER NOT NULL,
+    "armor_divisor" REAL NOT NULL DEFAULT 1.0
+        CHECK ("armor_divisor" > 0),
+    "reach" TEXT,
+    "parry" TEXT,
+    "acc" INTEGER,
+    "range_half" INTEGER,
+    "range_max" INTEGER,
+    "rof" INTEGER,
+    "shots" TEXT,
+    "recoil" INTEGER,
     "attack_modifier" INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY("melee_weapon_id") REFERENCES "melee_weapons"("melee_weapon_id") ON DELETE CASCADE,
-    FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE RESTRICT
+    "notes" TEXT,
+    CHECK ("damage_base" IS NULL OR "damage_dice" IS NULL),
+    UNIQUE("weapon_id", "mode_name"),
+    FOREIGN KEY("weapon_id") REFERENCES "weapons"("weapon_id") ON DELETE CASCADE,
+    FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE RESTRICT,
+    FOREIGN KEY("damage_type_id") REFERENCES "damage_types"("damage_type_id") ON DELETE RESTRICT
 );
-CREATE INDEX "idx_melee_weapon_modes_weapon"
-    ON "melee_weapon_modes" ("melee_weapon_id");
-INSERT INTO "melee_weapons" (
-    "name", "tl", "min_st", "is_two_handed", "weight", "cost",
+CREATE INDEX "idx_weapon_modes_weapon"
+    ON "weapon_modes" ("weapon_id");
+CREATE INDEX "idx_weapon_modes_skill"
+    ON "weapon_modes" ("skill_id");
+CREATE INDEX "idx_weapon_modes_damage_type"
+    ON "weapon_modes" ("damage_type_id");
+INSERT INTO "weapons" (
+    "key", "name", "tl", "min_st", "is_two_handed", "weight", "cost",
     "description", "is_unarmed", "is_fallback"
 )
-SELECT 'Briga', 0, 0, 0, 0.0, 0.0,
+SELECT 'brawling', 'Briga', 0, 0, 0, 0.0, 0.0,
        'Ataques desarmados de Briga.', 1, 0
 WHERE NOT EXISTS (
-    SELECT 1 FROM "melee_weapons"
-    WHERE "is_unarmed" = 1 AND "name" = 'Briga'
+    SELECT 1 FROM "weapons"
+    WHERE "key" = 'brawling'
 );
-INSERT INTO "melee_weapons" (
-    "name", "tl", "min_st", "is_two_handed", "weight", "cost",
+INSERT INTO "weapons" (
+    "key", "name", "tl", "min_st", "is_two_handed", "weight", "cost",
     "description", "is_unarmed", "is_fallback"
 )
-SELECT 'Combate Desarmado', 0, 0, 0, 0.0, 0.0,
+SELECT 'unarmed_combat', 'Combate Desarmado', 0, 0, 0, 0.0, 0.0,
        'Modos genéricos para personagens sem perícia desarmada específica.',
        1, 1
 WHERE NOT EXISTS (
-    SELECT 1 FROM "melee_weapons"
-    WHERE "is_unarmed" = 1 AND "is_fallback" = 1
+    SELECT 1 FROM "weapons"
+    WHERE "key" = 'unarmed_combat'
 );
-INSERT INTO "melee_weapon_modes" (
-    "melee_weapon_id", "mode_name", "skill_id", "damage_base",
-    "damage_modifier", "damage_type", "reach", "parry", "notes",
-    "attack_modifier"
+INSERT INTO "weapon_modes" (
+    "weapon_id", "mode_name", "skill_id", "attack_kind",
+    "damage_base", "damage_dice", "damage_modifier", "damage_type_id",
+    "armor_divisor", "reach", "parry", "notes", "attack_modifier"
 )
 SELECT
-    w."melee_weapon_id", 'Soco',
+    w."weapon_id", 'Soco',
     (SELECT "skill_id" FROM "skills" WHERE "name" = 'Briga'),
-    'GdP', -1, 'contusão', 'C', 'Não',
+    'melee', 'thrust', NULL, -1, 4, 1.0, 'C', 'Não',
     'GURPS 4e: thr-1 cr.', 0
-FROM "melee_weapons" w
-WHERE w."is_unarmed" = 1 AND w."name" = 'Briga'
+FROM "weapons" w
+WHERE w."key" = 'brawling'
   AND NOT EXISTS (
-      SELECT 1 FROM "melee_weapon_modes" m
-      WHERE m."melee_weapon_id" = w."melee_weapon_id"
+      SELECT 1 FROM "weapon_modes" m
+      WHERE m."weapon_id" = w."weapon_id"
         AND m."mode_name" = 'Soco'
   );
-INSERT INTO "melee_weapon_modes" (
-    "melee_weapon_id", "mode_name", "skill_id", "damage_base",
-    "damage_modifier", "damage_type", "reach", "parry", "notes",
-    "attack_modifier"
+INSERT INTO "weapon_modes" (
+    "weapon_id", "mode_name", "skill_id", "attack_kind",
+    "damage_base", "damage_dice", "damage_modifier", "damage_type_id",
+    "armor_divisor", "reach", "parry", "notes", "attack_modifier"
 )
 SELECT
-    w."melee_weapon_id", 'Chute',
+    w."weapon_id", 'Chute',
     (SELECT "skill_id" FROM "skills" WHERE "name" = 'Briga'),
-    'GdP', 0, 'contusão', 'C,1', 'Não',
+    'melee', 'thrust', NULL, 0, 4, 1.0, 'C,1', 'Não',
     'GURPS 4e: thr cr; -2 para acertar.', -2
-FROM "melee_weapons" w
-WHERE w."is_unarmed" = 1 AND w."name" = 'Briga'
+FROM "weapons" w
+WHERE w."key" = 'brawling'
   AND NOT EXISTS (
-      SELECT 1 FROM "melee_weapon_modes" m
-      WHERE m."melee_weapon_id" = w."melee_weapon_id"
+      SELECT 1 FROM "weapon_modes" m
+      WHERE m."weapon_id" = w."weapon_id"
         AND m."mode_name" = 'Chute'
   );
-INSERT INTO "melee_weapon_modes" (
-    "melee_weapon_id", "mode_name", "skill_id", "damage_base",
-    "damage_modifier", "damage_type", "reach", "parry", "notes",
-    "attack_modifier"
+INSERT INTO "weapon_modes" (
+    "weapon_id", "mode_name", "skill_id", "attack_kind",
+    "damage_base", "damage_dice", "damage_modifier", "damage_type_id",
+    "armor_divisor", "reach", "parry", "notes", "attack_modifier"
 )
 SELECT
-    w."melee_weapon_id", 'Soco',
-    NULL,
-    'GdP', -1, 'contusão', 'C', 'Não',
+    w."weapon_id", 'Soco', NULL,
+    'melee', 'thrust', NULL, -1, 4, 1.0, 'C', 'Não',
     'GURPS 4e: thr-1 cr.', 0
-FROM "melee_weapons" w
-WHERE w."is_unarmed" = 1 AND w."is_fallback" = 1
+FROM "weapons" w
+WHERE w."key" = 'unarmed_combat'
   AND NOT EXISTS (
-      SELECT 1 FROM "melee_weapon_modes" m
-      WHERE m."melee_weapon_id" = w."melee_weapon_id"
+      SELECT 1 FROM "weapon_modes" m
+      WHERE m."weapon_id" = w."weapon_id"
         AND m."mode_name" = 'Soco'
   );
-INSERT INTO "melee_weapon_modes" (
-    "melee_weapon_id", "mode_name", "skill_id", "damage_base",
-    "damage_modifier", "damage_type", "reach", "parry", "notes",
-    "attack_modifier"
+INSERT INTO "weapon_modes" (
+    "weapon_id", "mode_name", "skill_id", "attack_kind",
+    "damage_base", "damage_dice", "damage_modifier", "damage_type_id",
+    "armor_divisor", "reach", "parry", "notes", "attack_modifier"
 )
 SELECT
-    w."melee_weapon_id", 'Chute',
-    NULL,
-    'GdP', 0, 'contusão', 'C,1', 'Não',
+    w."weapon_id", 'Chute', NULL,
+    'melee', 'thrust', NULL, 0, 4, 1.0, 'C,1', 'Não',
     'GURPS 4e: thr cr; -2 para acertar.', -2
-FROM "melee_weapons" w
-WHERE w."is_unarmed" = 1 AND w."is_fallback" = 1
+FROM "weapons" w
+WHERE w."key" = 'unarmed_combat'
   AND NOT EXISTS (
-      SELECT 1 FROM "melee_weapon_modes" m
-      WHERE m."melee_weapon_id" = w."melee_weapon_id"
+      SELECT 1 FROM "weapon_modes" m
+      WHERE m."weapon_id" = w."weapon_id"
         AND m."mode_name" = 'Chute'
   );
-CREATE TABLE "ranged_weapons" (
-    "ranged_weapon_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT NOT NULL,
-    "skill_id" INTEGER,          -- Perícia necessária para usar a arma
-    "damage" TEXT,               -- Ex: '2d+1 pi+', '3d dth'
-    "acc" INTEGER DEFAULT 0,     -- Acurácia (Acc)
-    "range_half" INTEGER,        -- Alcance 1/2D
-    "range_max" INTEGER,         -- Alcance Máximo
-    "rof" INTEGER DEFAULT 1,     -- Cadência de Tiro (RoF)
-    "shots" TEXT,                -- Tiros/Carga (Ex: '10(3)', '1')
-    "min_st" INTEGER DEFAULT 0,  -- ST Mínimo
-    "recoil" INTEGER DEFAULT 1,  -- Recuo (Rcl)
-    "weight" REAL DEFAULT 0.0,   -- Peso
-    "cost" REAL DEFAULT 0.0,     -- Custo
-    "description" TEXT,
-    FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE RESTRICT
-);
 CREATE TABLE "body_parts" (
     "body_part_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL UNIQUE,          -- Ex: 'Cabeça', 'Tronco', 'Braços', 'Pernas', 'Mãos', 'Pés'
@@ -254,8 +277,8 @@ CREATE TABLE "pending_attacks" (
     "mode_name" TEXT,
     "skill_name" TEXT,
     "mode_id" INTEGER,
-    "attack_kind" TEXT NOT NULL DEFAULT 'melee',
-    "ranged_weapon_id" INTEGER,
+    "attack_kind" TEXT NOT NULL DEFAULT 'melee'
+        CHECK ("attack_kind" IN ('melee', 'ranged')),
     "damage_expression" TEXT,
     "maneuver" TEXT,
     "custom_modifier" INTEGER NOT NULL DEFAULT 0,
@@ -269,6 +292,8 @@ CREATE TABLE "pending_attacks" (
     "defense_attempts" INTEGER NOT NULL DEFAULT 0,
     "rd" INTEGER NOT NULL DEFAULT 0,
     "damage_type" INTEGER NOT NULL,
+    "armor_divisor" REAL NOT NULL DEFAULT 1.0
+        CHECK ("armor_divisor" > 0),
     "hit_location" INTEGER NOT NULL,
     "hit_sublocation" TEXT,
     "hit_sublocation_roll" INTEGER,
@@ -280,7 +305,8 @@ CREATE TABLE "pending_attacks" (
     "created_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TEXT,
     "resolved_at" TEXT,
-    FOREIGN KEY("session_id") REFERENCES "combat_sessions"("session_id") ON DELETE SET NULL
+    FOREIGN KEY("session_id") REFERENCES "combat_sessions"("session_id") ON DELETE SET NULL,
+    FOREIGN KEY("mode_id") REFERENCES "weapon_modes"("mode_id") ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX "idx_pending_attacks_one_per_channel"
     ON "pending_attacks" ("channel_id")
@@ -394,26 +420,27 @@ CREATE TABLE "character_items" (
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
     FOREIGN KEY("item_id") REFERENCES "items"("item_id") ON DELETE CASCADE
 );
-CREATE TABLE "character_melee_weapons" (
-    "character_melee_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE "character_weapons" (
+    "character_weapon_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
-    "melee_weapon_id" INTEGER NOT NULL,
-    "custom_name" TEXT,                  -- Ex: 'Foice de Guerra de Titânio'
-    "quantity" INTEGER DEFAULT 1,
-    "is_equipped" INTEGER DEFAULT 0,
+    "weapon_id" INTEGER NOT NULL,
+    "custom_name" TEXT,
+    "quantity" INTEGER NOT NULL DEFAULT 1 CHECK ("quantity" >= 1),
+    "is_equipped" INTEGER NOT NULL DEFAULT 0
+        CHECK ("is_equipped" IN (0, 1)),
+    "current_shots" INTEGER NOT NULL DEFAULT 0
+        CHECK ("current_shots" >= 0),
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("melee_weapon_id") REFERENCES "melee_weapons"("melee_weapon_id") ON DELETE RESTRICT
+    FOREIGN KEY("weapon_id") REFERENCES "weapons"("weapon_id") ON DELETE RESTRICT
 );
-CREATE TABLE "character_ranged_weapons" (
-    "character_ranged_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER NOT NULL,
-    "ranged_weapon_id" INTEGER NOT NULL,
-    "quantity" INTEGER DEFAULT 1,
-    "current_shots" INTEGER DEFAULT 0,
-    "is_equipped" INTEGER DEFAULT 0,
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("ranged_weapon_id") REFERENCES "ranged_weapons"("ranged_weapon_id") ON DELETE CASCADE
-);
+CREATE UNIQUE INDEX "idx_character_weapons_unique"
+    ON "character_weapons" (
+        "character_id",
+        "weapon_id",
+        COALESCE("custom_name", '')
+    );
+CREATE INDEX "idx_character_weapons_character"
+    ON "character_weapons" ("character_id", "is_equipped");
 CREATE TABLE "character_armors" (
     "character_armor_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
@@ -492,4 +519,4 @@ CREATE TABLE "character_disadvantages" (
 	FOREIGN KEY("disadvantage_id") REFERENCES "disadvantages"("disadvantage_id") ON DELETE CASCADE
 );
 
-PRAGMA user_version = 12;
+PRAGMA user_version = 13;
